@@ -9,9 +9,12 @@ const emptyData = {
   subjects: [],
   documents: [],
   exercises: [],
-  events: [],
-  studySessions: []
+  events: []
 };
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
 
 function loadData() {
   try {
@@ -22,14 +25,13 @@ function loadData() {
   }
 }
 
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
-
 function App() {
   const [data, setData] = useState(loadData);
   const [page, setPage] = useState("dashboard");
-  const [accepted, setAccepted] = useState(localStorage.getItem(DISCLAIMER_KEY) === "yes");
+  const [selectedSubjectId, setSelectedSubjectId] = useState(null);
+  const [accepted, setAccepted] = useState(
+    localStorage.getItem(DISCLAIMER_KEY) === "yes"
+  );
 
   const [subjectForm, setSubjectForm] = useState({
     name: "",
@@ -79,6 +81,10 @@ function App() {
     return { total, done, review, stuck, progress };
   }, [data]);
 
+  function getSubject(id) {
+    return data.subjects.find(s => s.id === id);
+  }
+
   function acceptDisclaimer() {
     localStorage.setItem(DISCLAIMER_KEY, "yes");
     setAccepted(true);
@@ -113,6 +119,11 @@ function App() {
       exercises: d.exercises.filter(x => x.subjectId !== id),
       events: d.events.filter(x => x.subjectId !== id)
     }));
+
+    if (selectedSubjectId === id) {
+      setSelectedSubjectId(null);
+      setPage("subjects");
+    }
   }
 
   function addDocument(e) {
@@ -124,7 +135,13 @@ function App() {
       documents: [...d.documents, { id: uid(), ...docForm }]
     }));
 
-    setDocForm({ subjectId: "", name: "", type: "PDF", link: "", notes: "" });
+    setDocForm({
+      subjectId: "",
+      name: "",
+      type: "PDF",
+      link: "",
+      notes: ""
+    });
   }
 
   function deleteDocument(id) {
@@ -176,7 +193,13 @@ function App() {
       events: [...d.events, { id: uid(), ...eventForm }]
     }));
 
-    setEventForm({ subjectId: "", title: "", type: "Teste", date: "", topics: "" });
+    setEventForm({
+      subjectId: "",
+      title: "",
+      type: "Teste",
+      date: "",
+      topics: ""
+    });
   }
 
   function deleteEvent(id) {
@@ -186,13 +209,8 @@ function App() {
     }));
   }
 
-  function getSubject(id) {
-    return data.subjects.find(s => s.id === id);
-  }
-
   function shareWhatsApp(text) {
-    const url = "https://wa.me/?text=" + encodeURIComponent(text);
-    window.open(url, "_blank");
+    window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");
   }
 
   function generatePlan(subject) {
@@ -200,7 +218,10 @@ function App() {
     const pending = exercises.filter(e => e.status !== "Resolvido").length;
     const difficulty = Number(subject.difficulty || 3);
     const baseHours = Number(subject.weeklyHours || 2);
-    const recommended = Math.max(1, Math.round((baseHours + pending * 0.25 + difficulty * 0.3) * 10) / 10);
+    const recommended = Math.max(
+      1,
+      Math.round((baseHours + pending * 0.25 + difficulty * 0.3) * 10) / 10
+    );
 
     return {
       pending,
@@ -217,12 +238,15 @@ function App() {
           <h2>Aviso Legal / Disclaimer</h2>
           <p>
             O RJP_Study é uma ferramenta de apoio ao estudo, organização académica
-            e planeamento pessoal. Não substitui professores, explicadores ou instituições
-            de ensino, nem garante resultados académicos.
+            e planeamento pessoal.
           </p>
           <p>
-            O utilizador é responsável pela validação das datas, documentos, matérias,
-            matrizes, exercícios e planos introduzidos na aplicação.
+            Não substitui professores, explicadores ou instituições de ensino, nem
+            garante resultados académicos.
+          </p>
+          <p>
+            O utilizador é responsável pela validação das datas, documentos,
+            matérias, matrizes, exercícios e planos introduzidos.
           </p>
           <button onClick={acceptDisclaimer}>Li e aceito</button>
         </div>
@@ -256,21 +280,28 @@ function App() {
             <h2>Dashboard</h2>
 
             <div className="grid">
-              <div className="card">
+              <div className="card clickable" onClick={() => setPage("subjects")}>
                 <h3>Disciplinas</h3>
                 <strong>{data.subjects.length}</strong>
+                <p>Abrir disciplinas</p>
               </div>
-              <div className="card">
+
+              <div className="card clickable" onClick={() => setPage("documents")}>
                 <h3>Documentos</h3>
                 <strong>{data.documents.length}</strong>
+                <p>Abrir documentos</p>
               </div>
-              <div className="card">
+
+              <div className="card clickable" onClick={() => setPage("exercises")}>
                 <h3>Exercícios resolvidos</h3>
                 <strong>{stats.done}/{stats.total}</strong>
+                <p>Abrir exercícios</p>
               </div>
-              <div className="card">
+
+              <div className="card clickable" onClick={() => setPage("stats")}>
                 <h3>Preparação global</h3>
                 <strong>{stats.progress}%</strong>
+                <p>Ver estatísticas</p>
               </div>
             </div>
 
@@ -278,17 +309,32 @@ function App() {
               <div className="empty">
                 <h3>Ainda não existem disciplinas</h3>
                 <p>Começa por criar a tua primeira disciplina.</p>
-                <button onClick={() => setPage("subjects")}>+ Adicionar disciplina</button>
+                <button onClick={() => setPage("subjects")}>
+                  + Adicionar disciplina
+                </button>
               </div>
             )}
 
             {data.subjects.map(s => {
               const plan = generatePlan(s);
               return (
-                <div className="item" key={s.id}>
+                <div
+                  className="item clickable"
+                  key={s.id}
+                  style={{ borderLeftColor: s.color }}
+                  onClick={() => {
+                    setSelectedSubjectId(s.id);
+                    setPage("subjectFolder");
+                  }}
+                >
                   <h3>{s.name}</h3>
                   <p>{plan.text}</p>
-                  <button onClick={() => shareWhatsApp(`RJP_Study\nPlano de estudo\n${plan.text}`)}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      shareWhatsApp(`RJP_Study\nPlano de estudo\n${plan.text}`);
+                    }}
+                  >
                     Partilhar WhatsApp
                   </button>
                 </div>
@@ -302,27 +348,156 @@ function App() {
             <h2>Disciplinas</h2>
 
             <form className="form" onSubmit={addSubject}>
-              <input placeholder="Nome da disciplina" value={subjectForm.name} onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })} />
-              <input placeholder="Ano" value={subjectForm.year} onChange={e => setSubjectForm({ ...subjectForm, year: e.target.value })} />
-              <input placeholder="Curso" value={subjectForm.course} onChange={e => setSubjectForm({ ...subjectForm, course: e.target.value })} />
-              <input type="color" value={subjectForm.color} onChange={e => setSubjectForm({ ...subjectForm, color: e.target.value })} />
-              <input type="number" min="1" max="5" placeholder="Dificuldade 1-5" value={subjectForm.difficulty} onChange={e => setSubjectForm({ ...subjectForm, difficulty: e.target.value })} />
-              <input type="number" placeholder="Horas semanais" value={subjectForm.weeklyHours} onChange={e => setSubjectForm({ ...subjectForm, weeklyHours: e.target.value })} />
-              <input placeholder="Professor" value={subjectForm.teacher} onChange={e => setSubjectForm({ ...subjectForm, teacher: e.target.value })} />
-              <input placeholder="Observações" value={subjectForm.notes} onChange={e => setSubjectForm({ ...subjectForm, notes: e.target.value })} />
+              <input
+                placeholder="Nome da disciplina"
+                value={subjectForm.name}
+                onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })}
+              />
+              <input
+                placeholder="Ano"
+                value={subjectForm.year}
+                onChange={e => setSubjectForm({ ...subjectForm, year: e.target.value })}
+              />
+              <input
+                placeholder="Curso"
+                value={subjectForm.course}
+                onChange={e => setSubjectForm({ ...subjectForm, course: e.target.value })}
+              />
+              <input
+                type="color"
+                value={subjectForm.color}
+                onChange={e => setSubjectForm({ ...subjectForm, color: e.target.value })}
+              />
+              <input
+                type="number"
+                min="1"
+                max="5"
+                placeholder="Dificuldade 1-5"
+                value={subjectForm.difficulty}
+                onChange={e => setSubjectForm({ ...subjectForm, difficulty: e.target.value })}
+              />
+              <input
+                type="number"
+                placeholder="Horas semanais"
+                value={subjectForm.weeklyHours}
+                onChange={e => setSubjectForm({ ...subjectForm, weeklyHours: e.target.value })}
+              />
+              <input
+                placeholder="Professor"
+                value={subjectForm.teacher}
+                onChange={e => setSubjectForm({ ...subjectForm, teacher: e.target.value })}
+              />
+              <input
+                placeholder="Observações"
+                value={subjectForm.notes}
+                onChange={e => setSubjectForm({ ...subjectForm, notes: e.target.value })}
+              />
               <button>+ Adicionar disciplina</button>
             </form>
 
-            {data.subjects.length === 0 && <div className="empty">Ainda não existem disciplinas.</div>}
+            {data.subjects.length === 0 && (
+              <div className="empty">Ainda não existem disciplinas.</div>
+            )}
 
             {data.subjects.map(s => (
-              <div className="item" key={s.id} style={{ borderLeftColor: s.color }}>
+              <div
+                className="item clickable"
+                key={s.id}
+                style={{ borderLeftColor: s.color }}
+                onClick={() => {
+                  setSelectedSubjectId(s.id);
+                  setPage("subjectFolder");
+                }}
+              >
                 <h3>{s.name}</h3>
                 <p>{s.year} {s.course && `• ${s.course}`}</p>
                 <p>Dificuldade: {s.difficulty}/5 • {s.weeklyHours}h/semana</p>
-                <button onClick={() => deleteSubject(s.id)}>Eliminar</button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteSubject(s.id);
+                  }}
+                >
+                  Eliminar
+                </button>
               </div>
             ))}
+          </section>
+        )}
+
+        {page === "subjectFolder" && selectedSubjectId && (
+          <section>
+            {(() => {
+              const subject = getSubject(selectedSubjectId);
+              if (!subject) return <p>Disciplina não encontrada.</p>;
+
+              const subjectDocuments = data.documents.filter(d => d.subjectId === selectedSubjectId);
+              const subjectExercises = data.exercises.filter(e => e.subjectId === selectedSubjectId);
+              const subjectEvents = data.events.filter(e => e.subjectId === selectedSubjectId);
+              const plan = generatePlan(subject);
+
+              return (
+                <>
+                  <button onClick={() => setPage("subjects")}>
+                    ← Voltar às disciplinas
+                  </button>
+
+                  <h2>{subject.name}</h2>
+                  <p>{subject.year} {subject.course && `• ${subject.course}`}</p>
+                  <p>Dificuldade: {subject.difficulty}/5 • {subject.weeklyHours}h/semana</p>
+
+                  <div className="grid">
+                    <div className="card clickable" onClick={() => setPage("documents")}>
+                      <h3>Documentos</h3>
+                      <strong>{subjectDocuments.length}</strong>
+                    </div>
+
+                    <div className="card clickable" onClick={() => setPage("exercises")}>
+                      <h3>Exercícios</h3>
+                      <strong>{subjectExercises.length}</strong>
+                    </div>
+
+                    <div className="card clickable" onClick={() => setPage("calendar")}>
+                      <h3>Avaliações / Calendário</h3>
+                      <strong>{subjectEvents.length}</strong>
+                    </div>
+                  </div>
+
+                  <div className="item">
+                    <h3>Plano sugerido</h3>
+                    <p>{plan.text}</p>
+                    <button
+                      onClick={() =>
+                        shareWhatsApp(`RJP_Study\n${subject.name}\n${plan.text}`)
+                      }
+                    >
+                      Partilhar plano no WhatsApp
+                    </button>
+                  </div>
+
+                  <div className="item">
+                    <h3>Documentos da disciplina</h3>
+                    {subjectDocuments.length === 0 && <p>Sem documentos associados.</p>}
+                    {subjectDocuments.map(d => (
+                      <p key={d.id}>
+                        <strong>{d.type}</strong> — {d.name}
+                      </p>
+                    ))}
+                  </div>
+
+                  <div className="item">
+                    <h3>Exercícios da disciplina</h3>
+                    {subjectExercises.length === 0 && <p>Sem exercícios registados.</p>}
+                    {subjectExercises.map(e => (
+                      <p key={e.id}>
+                        {e.title} — <strong>{e.status}</strong>
+                      </p>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
           </section>
         )}
 
@@ -331,12 +506,20 @@ function App() {
             <h2>Documentos</h2>
 
             <form className="form" onSubmit={addDocument}>
-              <select value={docForm.subjectId} onChange={e => setDocForm({ ...docForm, subjectId: e.target.value })}>
+              <select
+                value={docForm.subjectId}
+                onChange={e => setDocForm({ ...docForm, subjectId: e.target.value })}
+              >
                 <option value="">Disciplina</option>
-                {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {data.subjects.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
               </select>
 
-              <select value={docForm.type} onChange={e => setDocForm({ ...docForm, type: e.target.value })}>
+              <select
+                value={docForm.type}
+                onChange={e => setDocForm({ ...docForm, type: e.target.value })}
+              >
                 <option>PDF</option>
                 <option>Excel</option>
                 <option>Resumo</option>
@@ -346,9 +529,21 @@ function App() {
                 <option>Apontamentos</option>
               </select>
 
-              <input placeholder="Nome do documento" value={docForm.name} onChange={e => setDocForm({ ...docForm, name: e.target.value })} />
-              <input placeholder="Link do documento" value={docForm.link} onChange={e => setDocForm({ ...docForm, link: e.target.value })} />
-              <input placeholder="Notas" value={docForm.notes} onChange={e => setDocForm({ ...docForm, notes: e.target.value })} />
+              <input
+                placeholder="Nome do documento"
+                value={docForm.name}
+                onChange={e => setDocForm({ ...docForm, name: e.target.value })}
+              />
+              <input
+                placeholder="Link do documento"
+                value={docForm.link}
+                onChange={e => setDocForm({ ...docForm, link: e.target.value })}
+              />
+              <input
+                placeholder="Notas"
+                value={docForm.notes}
+                onChange={e => setDocForm({ ...docForm, notes: e.target.value })}
+              />
               <button>Adicionar documento</button>
             </form>
 
@@ -359,7 +554,15 @@ function App() {
                   <h3>{d.name}</h3>
                   <p>{s?.name} • {d.type}</p>
                   {d.link && <a href={d.link} target="_blank">Abrir</a>}
-                  <button onClick={() => shareWhatsApp(`RJP_Study\nDocumento: ${d.name}\nDisciplina: ${s?.name || ""}\nTipo: ${d.type}\n${d.link || ""}`)}>WhatsApp</button>
+                  <button
+                    onClick={() =>
+                      shareWhatsApp(
+                        `RJP_Study\nDocumento: ${d.name}\nDisciplina: ${s?.name || ""}\nTipo: ${d.type}\n${d.link || ""}`
+                      )
+                    }
+                  >
+                    WhatsApp
+                  </button>
                   <button onClick={() => deleteDocument(d.id)}>Eliminar</button>
                 </div>
               );
@@ -372,26 +575,47 @@ function App() {
             <h2>Exercícios</h2>
 
             <form className="form" onSubmit={addExercise}>
-              <select value={exerciseForm.subjectId} onChange={e => setExerciseForm({ ...exerciseForm, subjectId: e.target.value })}>
+              <select
+                value={exerciseForm.subjectId}
+                onChange={e => setExerciseForm({ ...exerciseForm, subjectId: e.target.value })}
+              >
                 <option value="">Disciplina</option>
-                {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {data.subjects.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
               </select>
 
-              <select value={exerciseForm.documentId} onChange={e => setExerciseForm({ ...exerciseForm, documentId: e.target.value })}>
+              <select
+                value={exerciseForm.documentId}
+                onChange={e => setExerciseForm({ ...exerciseForm, documentId: e.target.value })}
+              >
                 <option value="">Documento associado</option>
-                {data.documents.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                {data.documents.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
               </select>
 
-              <input placeholder="Exercício / questão" value={exerciseForm.title} onChange={e => setExerciseForm({ ...exerciseForm, title: e.target.value })} />
+              <input
+                placeholder="Exercício / questão"
+                value={exerciseForm.title}
+                onChange={e => setExerciseForm({ ...exerciseForm, title: e.target.value })}
+              />
 
-              <select value={exerciseForm.status} onChange={e => setExerciseForm({ ...exerciseForm, status: e.target.value })}>
+              <select
+                value={exerciseForm.status}
+                onChange={e => setExerciseForm({ ...exerciseForm, status: e.target.value })}
+              >
                 <option>Por fazer</option>
                 <option>Resolvido</option>
                 <option>Rever</option>
                 <option>Não percebi</option>
               </select>
 
-              <input placeholder="Notas" value={exerciseForm.notes} onChange={e => setExerciseForm({ ...exerciseForm, notes: e.target.value })} />
+              <input
+                placeholder="Notas"
+                value={exerciseForm.notes}
+                onChange={e => setExerciseForm({ ...exerciseForm, notes: e.target.value })}
+              />
               <button>Adicionar exercício</button>
             </form>
 
@@ -401,7 +625,10 @@ function App() {
                 <div className="item" key={ex.id}>
                   <h3>{ex.title}</h3>
                   <p>{s?.name} • {ex.status}</p>
-                  <select value={ex.status} onChange={e => updateExerciseStatus(ex.id, e.target.value)}>
+                  <select
+                    value={ex.status}
+                    onChange={e => updateExerciseStatus(ex.id, e.target.value)}
+                  >
                     <option>Por fazer</option>
                     <option>Resolvido</option>
                     <option>Rever</option>
@@ -419,21 +646,41 @@ function App() {
             <h2>Calendário</h2>
 
             <form className="form" onSubmit={addEvent}>
-              <select value={eventForm.subjectId} onChange={e => setEventForm({ ...eventForm, subjectId: e.target.value })}>
+              <select
+                value={eventForm.subjectId}
+                onChange={e => setEventForm({ ...eventForm, subjectId: e.target.value })}
+              >
                 <option value="">Disciplina</option>
-                {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {data.subjects.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
               </select>
 
-              <select value={eventForm.type} onChange={e => setEventForm({ ...eventForm, type: e.target.value })}>
+              <select
+                value={eventForm.type}
+                onChange={e => setEventForm({ ...eventForm, type: e.target.value })}
+              >
                 <option>Teste</option>
                 <option>Exame</option>
                 <option>Questão-aula</option>
                 <option>Sessão de estudo</option>
               </select>
 
-              <input placeholder="Título" value={eventForm.title} onChange={e => setEventForm({ ...eventForm, title: e.target.value })} />
-              <input type="date" value={eventForm.date} onChange={e => setEventForm({ ...eventForm, date: e.target.value })} />
-              <input placeholder="Matéria" value={eventForm.topics} onChange={e => setEventForm({ ...eventForm, topics: e.target.value })} />
+              <input
+                placeholder="Título"
+                value={eventForm.title}
+                onChange={e => setEventForm({ ...eventForm, title: e.target.value })}
+              />
+              <input
+                type="date"
+                value={eventForm.date}
+                onChange={e => setEventForm({ ...eventForm, date: e.target.value })}
+              />
+              <input
+                placeholder="Matéria"
+                value={eventForm.topics}
+                onChange={e => setEventForm({ ...eventForm, topics: e.target.value })}
+              />
               <button>Adicionar evento</button>
             </form>
 
@@ -454,12 +701,28 @@ function App() {
         {page === "stats" && (
           <section>
             <h2>Estatísticas</h2>
+
             <div className="grid">
-              <div className="card"><h3>Exercícios</h3><strong>{stats.total}</strong></div>
-              <div className="card"><h3>Resolvidos</h3><strong>{stats.done}</strong></div>
-              <div className="card"><h3>Rever</h3><strong>{stats.review}</strong></div>
-              <div className="card"><h3>Não percebi</h3><strong>{stats.stuck}</strong></div>
-              <div className="card"><h3>Preparação</h3><strong>{stats.progress}%</strong></div>
+              <div className="card">
+                <h3>Exercícios</h3>
+                <strong>{stats.total}</strong>
+              </div>
+              <div className="card">
+                <h3>Resolvidos</h3>
+                <strong>{stats.done}</strong>
+              </div>
+              <div className="card">
+                <h3>Rever</h3>
+                <strong>{stats.review}</strong>
+              </div>
+              <div className="card">
+                <h3>Não percebi</h3>
+                <strong>{stats.stuck}</strong>
+              </div>
+              <div className="card">
+                <h3>Preparação</h3>
+                <strong>{stats.progress}%</strong>
+              </div>
             </div>
           </section>
         )}
@@ -467,6 +730,7 @@ function App() {
         {page === "google" && (
           <section>
             <h2>Google</h2>
+
             <div className="item">
               <h3>Preparado para fase seguinte</h3>
               <p>Login Google, Drive por utilizador, Sheets e Calendar serão ligados na próxima fase.</p>

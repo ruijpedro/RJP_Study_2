@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./styles.css";
 
-const STORAGE_KEY = "RJP_STUDY_V40";
+const STORAGE_KEY = "RJP_STUDY_V41";
 const DISCLAIMER_KEY = "RJP_STUDY_DISCLAIMER_ACCEPTED";
 
 const initialData = {
@@ -24,11 +24,22 @@ function loadData() {
   }
 }
 
+function daysUntil(date) {
+  if (!date) return null;
+  const today = new Date();
+  const target = new Date(date);
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+}
+
 function App() {
   const [data, setData] = useState(loadData);
   const [page, setPage] = useState("dashboard");
   const [selectedSubjectId, setSelectedSubjectId] = useState(null);
-  const [accepted, setAccepted] = useState(localStorage.getItem(DISCLAIMER_KEY) === "yes");
+  const [accepted, setAccepted] = useState(
+    localStorage.getItem(DISCLAIMER_KEY) === "yes"
+  );
 
   const [subjectForm, setSubjectForm] = useState({
     name: "",
@@ -71,7 +82,7 @@ function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [data]);
 
-  const stats = useMemo(() => {
+  const globalStats = useMemo(() => {
     const total = data.exercises.length;
     const done = data.exercises.filter(e => e.status === "Resolvido").length;
     const review = data.exercises.filter(e => e.status === "Rever").length;
@@ -86,6 +97,32 @@ function App() {
 
   function getDocument(id) {
     return data.documents.find(d => d.id === id);
+  }
+
+  function getSubjectStats(subjectId) {
+    const exercises = data.exercises.filter(e => e.subjectId === subjectId);
+    const documents = data.documents.filter(d => d.subjectId === subjectId);
+    const events = data.events.filter(e => e.subjectId === subjectId);
+    const done = exercises.filter(e => e.status === "Resolvido").length;
+    const review = exercises.filter(e => e.status === "Rever").length;
+    const stuck = exercises.filter(e => e.status === "Não percebi").length;
+    const progress = exercises.length ? Math.round((done / exercises.length) * 100) : 0;
+
+    const futureEvents = events
+      .map(e => ({ ...e, days: daysUntil(e.date) }))
+      .filter(e => e.days !== null && e.days >= 0)
+      .sort((a, b) => a.days - b.days);
+
+    return {
+      exercises,
+      documents,
+      events,
+      done,
+      review,
+      stuck,
+      progress,
+      nextEvent: futureEvents[0] || null
+    };
   }
 
   function openSubject(id) {
@@ -181,7 +218,9 @@ function App() {
   function openDocument(doc) {
     if (doc.fileData) {
       const win = window.open();
-      win.document.write(`<iframe src="${doc.fileData}" style="width:100%;height:100vh;border:0"></iframe>`);
+      win.document.write(
+        `<iframe src="${doc.fileData}" style="width:100%;height:100vh;border:0"></iframe>`
+      );
       return;
     }
 
@@ -211,7 +250,9 @@ function App() {
   function updateExerciseStatus(id, status) {
     setData(d => ({
       ...d,
-      exercises: d.exercises.map(ex => ex.id === id ? { ...ex, status } : ex)
+      exercises: d.exercises.map(ex =>
+        ex.id === id ? { ...ex, status } : ex
+      )
     }));
   }
 
@@ -251,12 +292,23 @@ function App() {
     window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");
   }
 
+  function googleCalendarLink(event) {
+    const date = event.date?.replaceAll("-", "") || "";
+    const title = encodeURIComponent(`RJP_Study - ${event.type}: ${event.title}`);
+    const details = encodeURIComponent(event.topics || "");
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${date}/${date}&details=${details}`;
+  }
+
   function generatePlan(subject) {
-    const exs = data.exercises.filter(e => e.subjectId === subject.id);
-    const pending = exs.filter(e => e.status !== "Resolvido").length;
+    const stats = getSubjectStats(subject.id);
+    const pending = stats.exercises.filter(e => e.status !== "Resolvido").length;
     const difficulty = Number(subject.difficulty || 3);
     const baseHours = Number(subject.weeklyHours || 2);
-    const recommended = Math.max(1, Math.round((baseHours + pending * 0.25 + difficulty * 0.3) * 10) / 10);
+    const urgentBonus = stats.nextEvent && stats.nextEvent.days <= 7 ? 1.5 : 0;
+    const recommended = Math.max(
+      1,
+      Math.round((baseHours + pending * 0.25 + difficulty * 0.3 + urgentBonus) * 10) / 10
+    );
 
     return {
       pending,
@@ -280,8 +332,7 @@ function App() {
       </div>
     );
   }
-
-  return (
+    return (
     <div className="app">
       <aside>
         <div className="brand">
@@ -302,89 +353,63 @@ function App() {
       </aside>
 
       <main>
+
         {page === "dashboard" && (
           <section>
             <h2>Dashboard</h2>
 
             <div className="grid">
-              <div className="card clickable" onClick={() => setPage("subjects")}>
+              <div className="card">
                 <h3>Disciplinas</h3>
                 <strong>{data.subjects.length}</strong>
-                <p>Abrir disciplinas</p>
               </div>
 
-              <div className="card clickable" onClick={() => setPage("documents")}>
+              <div className="card">
                 <h3>Documentos</h3>
                 <strong>{data.documents.length}</strong>
-                <p>Abrir documentos</p>
               </div>
 
-              <div className="card clickable" onClick={() => setPage("exercises")}>
-                <h3>Exercícios resolvidos</h3>
-                <strong>{stats.done}/{stats.total}</strong>
-                <p>Abrir exercícios</p>
+              <div className="card">
+                <h3>Exercícios</h3>
+                <strong>{globalStats.total}</strong>
               </div>
 
-              <div className="card clickable" onClick={() => setPage("stats")}>
-                <h3>Preparação global</h3>
-                <strong>{stats.progress}%</strong>
-                <p>Ver estatísticas</p>
+              <div className="card">
+                <h3>Preparação</h3>
+                <strong>{globalStats.progress}%</strong>
               </div>
             </div>
 
-            {data.subjects.length === 0 && (
-              <div className="empty">
-                <h3>Ainda não existem disciplinas</h3>
-                <p>Começa por criar a tua primeira disciplina.</p>
-                <button onClick={() => setPage("subjects")}>+ Adicionar disciplina</button>
-              </div>
-            )}
-
             {data.subjects.map(subject => {
-              const plan = generatePlan(subject);
+              const stats = getSubjectStats(subject.id);
+
               return (
-                <div key={subject.id} className="item clickable" style={{ borderLeftColor: subject.color }} onClick={() => openSubject(subject.id)}>
+                <div
+                  key={subject.id}
+                  className="item clickable"
+                  style={{ borderLeftColor: subject.color }}
+                  onClick={() => openSubject(subject.id)}
+                >
                   <h3>{subject.name}</h3>
-                  <p>{plan.text}</p>
-                  <button onClick={e => {
-                    e.stopPropagation();
-                    shareWhatsApp(`RJP_Study\nPlano de estudo\n${plan.text}`);
-                  }}>WhatsApp</button>
+
+                  <p>
+                    {stats.documents.length} documentos •{" "}
+                    {stats.exercises.length} exercícios
+                  </p>
+
+                  <p>
+                    Preparação: <strong>{stats.progress}%</strong>
+                  </p>
+
+                  {stats.nextEvent && (
+                    <p>
+                      Próximo: {stats.nextEvent.type} em{" "}
+                      {stats.nextEvent.days} dias
+                    </p>
+                  )}
                 </div>
               );
             })}
-          </section>
-        )}
-
-        {page === "subjects" && (
-          <section>
-            <h2>Disciplinas</h2>
-
-            <form className="form" onSubmit={addSubject}>
-              <input placeholder="Nome da disciplina" value={subjectForm.name} onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })} />
-              <input placeholder="Ano" value={subjectForm.year} onChange={e => setSubjectForm({ ...subjectForm, year: e.target.value })} />
-              <input placeholder="Curso" value={subjectForm.course} onChange={e => setSubjectForm({ ...subjectForm, course: e.target.value })} />
-              <input type="color" value={subjectForm.color} onChange={e => setSubjectForm({ ...subjectForm, color: e.target.value })} />
-              <input type="number" min="1" max="5" placeholder="Dificuldade 1-5" value={subjectForm.difficulty} onChange={e => setSubjectForm({ ...subjectForm, difficulty: e.target.value })} />
-              <input type="number" placeholder="Horas semanais" value={subjectForm.weeklyHours} onChange={e => setSubjectForm({ ...subjectForm, weeklyHours: e.target.value })} />
-              <input placeholder="Professor" value={subjectForm.teacher} onChange={e => setSubjectForm({ ...subjectForm, teacher: e.target.value })} />
-              <input placeholder="Observações" value={subjectForm.notes} onChange={e => setSubjectForm({ ...subjectForm, notes: e.target.value })} />
-              <button>+ Adicionar disciplina</button>
-            </form>
-
-            {data.subjects.length === 0 && <div className="empty">Ainda não existem disciplinas.</div>}
-
-            {data.subjects.map(subject => (
-              <div key={subject.id} className="item clickable" style={{ borderLeftColor: subject.color }} onClick={() => openSubject(subject.id)}>
-                <h3>{subject.name}</h3>
-                <p>{subject.year} {subject.course && `• ${subject.course}`}</p>
-                <p>Dificuldade: {subject.difficulty}/5 • {subject.weeklyHours}h/semana</p>
-                <button onClick={e => {
-                  e.stopPropagation();
-                  deleteSubject(subject.id);
-                }}>Eliminar</button>
-              </div>
-            ))}
           </section>
         )}
 
@@ -392,62 +417,101 @@ function App() {
           <section>
             {(() => {
               const subject = getSubject(selectedSubjectId);
-              if (!subject) return <p>Disciplina não encontrada.</p>;
 
-              const subjectDocuments = data.documents.filter(d => d.subjectId === selectedSubjectId);
-              const subjectExercises = data.exercises.filter(e => e.subjectId === selectedSubjectId);
-              const subjectEvents = data.events.filter(e => e.subjectId === selectedSubjectId);
+              if (!subject) {
+                return <p>Disciplina não encontrada.</p>;
+              }
+
+              const stats = getSubjectStats(subject.id);
               const plan = generatePlan(subject);
 
               return (
                 <>
-                  <button onClick={() => setPage("subjects")}>← Voltar às disciplinas</button>
+                  <button onClick={() => setPage("subjects")}>
+                    ← Voltar
+                  </button>
 
                   <h2>{subject.name}</h2>
-                  <p>{subject.year} {subject.course && `• ${subject.course}`}</p>
-                  <p>Dificuldade: {subject.difficulty}/5 • {subject.weeklyHours}h/semana</p>
 
                   <div className="grid">
-                    <div className="card clickable" onClick={() => setPage("documents")}>
+                    <div className="card">
                       <h3>Documentos</h3>
-                      <strong>{subjectDocuments.length}</strong>
+                      <strong>{stats.documents.length}</strong>
                     </div>
 
-                    <div className="card clickable" onClick={() => setPage("exercises")}>
+                    <div className="card">
                       <h3>Exercícios</h3>
-                      <strong>{subjectExercises.length}</strong>
+                      <strong>{stats.exercises.length}</strong>
                     </div>
 
-                    <div className="card clickable" onClick={() => setPage("calendar")}>
-                      <h3>Avaliações / Calendário</h3>
-                      <strong>{subjectEvents.length}</strong>
+                    <div className="card">
+                      <h3>Preparação</h3>
+                      <strong>{stats.progress}%</strong>
                     </div>
                   </div>
 
                   <div className="item">
-                    <h3>Plano sugerido</h3>
+                    <h3>Plano automático</h3>
                     <p>{plan.text}</p>
-                    <button onClick={() => shareWhatsApp(`RJP_Study\n${subject.name}\n${plan.text}`)}>Partilhar plano no WhatsApp</button>
                   </div>
 
                   <div className="item">
-                    <h3>Documentos da disciplina</h3>
-                    {subjectDocuments.length === 0 && <p>Sem documentos associados.</p>}
-                    {subjectDocuments.map(doc => (
+                    <h3>Documentos</h3>
+
+                    {stats.documents.length === 0 && (
+                      <p>Sem documentos.</p>
+                    )}
+
+                    {stats.documents.map(doc => (
                       <div key={doc.id} className="mini">
-                        <strong>{doc.type}</strong> — {doc.name}
+                        <strong>{doc.name}</strong>
                         <br />
-                        <button onClick={() => openDocument(doc)}>Abrir</button>
-                        <button onClick={() => shareWhatsApp(`RJP_Study\nDocumento: ${doc.name}\nDisciplina: ${subject.name}\nTipo: ${doc.type}\n${doc.link || ""}`)}>WhatsApp</button>
+                        {doc.type}
+
+                        <br /><br />
+
+                        <button onClick={() => openDocument(doc)}>
+                          Abrir
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            shareWhatsApp(
+                              `Documento: ${doc.name}`
+                            )
+                          }
+                        >
+                          WhatsApp
+                        </button>
                       </div>
                     ))}
                   </div>
 
                   <div className="item">
-                    <h3>Exercícios da disciplina</h3>
-                    {subjectExercises.length === 0 && <p>Sem exercícios registados.</p>}
-                    {subjectExercises.map(ex => (
-                      <p key={ex.id}>{ex.title} — <strong>{ex.status}</strong></p>
+                    <h3>Avaliações</h3>
+
+                    {stats.events.length === 0 && (
+                      <p>Sem avaliações.</p>
+                    )}
+
+                    {stats.events.map(ev => (
+                      <div key={ev.id} className="mini">
+                        <strong>{ev.type}</strong>
+                        <br />
+                        {ev.title}
+                        <br />
+                        {ev.date}
+
+                        <br /><br />
+
+                        <a
+                          href={googleCalendarLink(ev)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Google Calendar
+                        </a>
+                      </div>
                     ))}
                   </div>
                 </>
@@ -456,175 +520,57 @@ function App() {
           </section>
         )}
 
-        {page === "documents" && (
-          <section>
-            <h2>Documentos</h2>
-
-            <form className="form" onSubmit={addDocument}>
-              <select value={docForm.subjectId} onChange={e => setDocForm({ ...docForm, subjectId: e.target.value })}>
-                <option value="">Disciplina</option>
-                {data.subjects.map(subject => (
-                  <option key={subject.id} value={subject.id}>{subject.name}</option>
-                ))}
-              </select>
-
-              <select value={docForm.type} onChange={e => setDocForm({ ...docForm, type: e.target.value })}>
-                <option>PDF</option>
-                <option>Excel</option>
-                <option>Resumo</option>
-                <option>Matriz</option>
-                <option>Exame</option>
-                <option>Ficha</option>
-                <option>Apontamentos</option>
-              </select>
-
-              <input placeholder="Nome do documento" value={docForm.name} onChange={e => setDocForm({ ...docForm, name: e.target.value })} />
-              <input placeholder="Link do documento / Drive" value={docForm.link} onChange={e => setDocForm({ ...docForm, link: e.target.value })} />
-              <input type="file" accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg" onChange={handleFile} />
-              <input placeholder="Notas" value={docForm.notes} onChange={e => setDocForm({ ...docForm, notes: e.target.value })} />
-              <button>Adicionar documento</button>
-            </form>
-
-            {data.documents.length === 0 && <div className="empty">Ainda não existem documentos.</div>}
-
-            {data.documents.map(doc => {
-              const subject = getSubject(doc.subjectId);
-              return (
-                <div key={doc.id} className="item">
-                  <h3>{doc.name}</h3>
-                  <p>{subject?.name} • {doc.type}</p>
-                  {doc.fileName && <p>Ficheiro: {doc.fileName}</p>}
-                  <button onClick={() => openDocument(doc)}>Abrir</button>
-                  <button onClick={() => shareWhatsApp(`RJP_Study\nDocumento: ${doc.name}\nDisciplina: ${subject?.name || ""}\nTipo: ${doc.type}\n${doc.link || ""}`)}>WhatsApp</button>
-                  <button onClick={() => deleteDocument(doc.id)}>Eliminar</button>
-                </div>
-              );
-            })}
-          </section>
-        )}
-
-        {page === "exercises" && (
-          <section>
-            <h2>Exercícios</h2>
-
-            <form className="form" onSubmit={addExercise}>
-              <select value={exerciseForm.subjectId} onChange={e => setExerciseForm({ ...exerciseForm, subjectId: e.target.value })}>
-                <option value="">Disciplina</option>
-                {data.subjects.map(subject => (
-                  <option key={subject.id} value={subject.id}>{subject.name}</option>
-                ))}
-              </select>
-
-              <select value={exerciseForm.documentId} onChange={e => setExerciseForm({ ...exerciseForm, documentId: e.target.value })}>
-                <option value="">Documento associado</option>
-                {data.documents.map(doc => (
-                  <option key={doc.id} value={doc.id}>{doc.name}</option>
-                ))}
-              </select>
-
-              <input placeholder="Exercício / questão" value={exerciseForm.title} onChange={e => setExerciseForm({ ...exerciseForm, title: e.target.value })} />
-
-              <select value={exerciseForm.status} onChange={e => setExerciseForm({ ...exerciseForm, status: e.target.value })}>
-                <option>Por fazer</option>
-                <option>Resolvido</option>
-                <option>Rever</option>
-                <option>Não percebi</option>
-              </select>
-
-              <input placeholder="Notas" value={exerciseForm.notes} onChange={e => setExerciseForm({ ...exerciseForm, notes: e.target.value })} />
-              <button>Adicionar exercício</button>
-            </form>
-
-            {data.exercises.length === 0 && <div className="empty">Ainda não existem exercícios.</div>}
-
-            {data.exercises.map(ex => {
-              const subject = getSubject(ex.subjectId);
-              const doc = getDocument(ex.documentId);
-
-              return (
-                <div key={ex.id} className="item">
-                  <h3>{ex.title}</h3>
-                  <p>{subject?.name} {doc && `• ${doc.name}`}</p>
-                  <select value={ex.status} onChange={e => updateExerciseStatus(ex.id, e.target.value)}>
-                    <option>Por fazer</option>
-                    <option>Resolvido</option>
-                    <option>Rever</option>
-                    <option>Não percebi</option>
-                  </select>
-                  <button onClick={() => deleteExercise(ex.id)}>Eliminar</button>
-                </div>
-              );
-            })}
-          </section>
-        )}
-
-        {page === "calendar" && (
-          <section>
-            <h2>Calendário</h2>
-
-            <form className="form" onSubmit={addEvent}>
-              <select value={eventForm.subjectId} onChange={e => setEventForm({ ...eventForm, subjectId: e.target.value })}>
-                <option value="">Disciplina</option>
-                {data.subjects.map(subject => (
-                  <option key={subject.id} value={subject.id}>{subject.name}</option>
-                ))}
-              </select>
-
-              <select value={eventForm.type} onChange={e => setEventForm({ ...eventForm, type: e.target.value })}>
-                <option>Teste</option>
-                <option>Exame</option>
-                <option>Questão-aula</option>
-                <option>Sessão de estudo</option>
-              </select>
-
-              <input placeholder="Título" value={eventForm.title} onChange={e => setEventForm({ ...eventForm, title: e.target.value })} />
-              <input type="date" value={eventForm.date} onChange={e => setEventForm({ ...eventForm, date: e.target.value })} />
-              <input placeholder="Matéria" value={eventForm.topics} onChange={e => setEventForm({ ...eventForm, topics: e.target.value })} />
-              <button>Adicionar evento</button>
-            </form>
-
-            {data.events.length === 0 && <div className="empty">Ainda não existem eventos.</div>}
-
-            {data.events.map(ev => {
-              const subject = getSubject(ev.subjectId);
-              return (
-                <div key={ev.id} className="item">
-                  <h3>{ev.type}: {ev.title}</h3>
-                  <p>{subject?.name} • {ev.date}</p>
-                  <p>{ev.topics}</p>
-                  <button onClick={() => deleteEvent(ev.id)}>Eliminar</button>
-                </div>
-              );
-            })}
-          </section>
-        )}
-
-        {page === "stats" && (
-          <section>
-            <h2>Estatísticas</h2>
-            <div className="grid">
-              <div className="card"><h3>Exercícios</h3><strong>{stats.total}</strong></div>
-              <div className="card"><h3>Resolvidos</h3><strong>{stats.done}</strong></div>
-              <div className="card"><h3>Rever</h3><strong>{stats.review}</strong></div>
-              <div className="card"><h3>Não percebi</h3><strong>{stats.stuck}</strong></div>
-              <div className="card"><h3>Preparação</h3><strong>{stats.progress}%</strong></div>
-            </div>
-          </section>
-        )}
-
         {page === "google" && (
           <section>
             <h2>Google</h2>
-            <div className="item">
-              <h3>Preparado para a fase seguinte</h3>
-              <p>Login Google, Drive por utilizador, Sheets e Calendar.</p>
-              <button disabled>Entrar com Google</button>
+
+            <div className="grid">
+
+              <div className="card">
+                <h3>Google Login</h3>
+                <p>Preparado para integração</p>
+                <button disabled>
+                  Entrar com Google
+                </button>
+              </div>
+
+              <div className="card">
+                <h3>Google Drive</h3>
+                <p>
+                  Futuro armazenamento:
+                </p>
+
+                <pre>
+RJP_Study
+ ├─ RMII
+ ├─ Estruturas
+ └─ Solos II
+                </pre>
+              </div>
+
+              <div className="card">
+                <h3>Google Sheets</h3>
+                <p>
+                  Base de dados online dos utilizadores
+                </p>
+              </div>
+
+              <div className="card">
+                <h3>Google Calendar</h3>
+                <p>
+                  Testes, exames e sessões de estudo
+                </p>
+              </div>
+
             </div>
           </section>
         )}
+
       </main>
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(
+  document.getElementById("root")
+).render(<App />);

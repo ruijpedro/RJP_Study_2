@@ -6,6 +6,7 @@
   --card: #ffffff;
   --text: #17202a;
   --muted: #6b7280;
+  --line: #d8e1ee;
 }
 
 * {
@@ -120,6 +121,7 @@ h2 {
   border-radius: 14px;
   background: #f4f7fb;
   margin-top: 10px;
+  border: 1px solid var(--line);
 }
 
 .form {
@@ -162,6 +164,17 @@ a {
   color: var(--red);
   font-weight: bold;
   margin-right: 12px;
+  display: inline-block;
+  margin-top: 8px;
+}
+
+pre {
+  background: #f4f7fb;
+  border-radius: 14px;
+  padding: 12px;
+  overflow-x: auto;
+  color: var(--blue);
+  border: 1px solid var(--line);
 }
 
 .empty {
@@ -209,6 +222,139 @@ a {
   color: var(--blue);
 }
 
+.exam-banner {
+  background: linear-gradient(135deg, #0f2742, #c41e3a);
+  color: white;
+  border-radius: 22px;
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: 0 14px 34px rgba(15, 39, 66, 0.18);
+}
+
+.exam-banner h3 {
+  margin-top: 0;
+}
+
+.exam-banner strong {
+  display: block;
+  font-size: 26px;
+  margin-top: 8px;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  border-radius: 20px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  box-shadow: 0 10px 28px rgba(15, 39, 66, 0.08);
+}
+
+.calendar-header h3 {
+  margin: 0;
+  color: var(--blue);
+  text-transform: capitalize;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(90px, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.calendar-day {
+  min-height: 95px;
+  background: white;
+  border-radius: 16px;
+  padding: 10px;
+  box-shadow: 0 6px 16px rgba(15, 39, 66, 0.06);
+  border: 1px solid var(--line);
+}
+
+.calendar-day strong {
+  color: var(--blue);
+}
+
+.calendar-event {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: #eaf1ff;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.progress-row {
+  margin-bottom: 16px;
+}
+
+.progress-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.progress-row span {
+  color: var(--red);
+  font-weight: bold;
+}
+
+.progress-track {
+  height: 14px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  min-width: 4px;
+}
+
+.printable-plan {
+  border-left-color: var(--red);
+}
+
+@media print {
+  aside,
+  button,
+  .form,
+  .calendar-header,
+  .calendar-grid,
+  a {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+
+  main {
+    padding: 0;
+  }
+
+  .app {
+    display: block;
+  }
+
+  .item,
+  .card,
+  .empty {
+    box-shadow: none;
+    border: 1px solid #ccc;
+  }
+
+  .printable-plan {
+    display: block !important;
+  }
+}
+
 @media (max-width: 800px) {
   .app {
     flex-direction: column;
@@ -220,5 +366,13 @@ a {
 
   main {
     padding: 18px;
+  }
+
+  .calendar-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .calendar-day {
+    min-height: 80px;
   }
 }

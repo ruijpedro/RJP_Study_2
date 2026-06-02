@@ -243,29 +243,46 @@ function App() {
   }
 
   function googleLogin() {
-    const clientId = googleForm.clientId || data.google?.clientId;
-    if (!clientId || !clientId.includes(".apps.googleusercontent.com")) {
-      alert("Coloca primeiro o OAuth Client ID correto no campo Google Client ID.");
-      return;
-    }
+  const clientId = googleForm.clientId || data.google?.clientId;
+
+  if (!clientId || !clientId.includes(".apps.googleusercontent.com")) {
+    alert("Coloca primeiro o OAuth Client ID correto no campo Google Client ID.");
+    return;
+  }
+
+  function tryLogin(attempt = 1) {
     if (!window.google?.accounts?.oauth2) {
-      alert("A biblioteca Google ainda não carregou. Atualiza a página e tenta novamente.");
+      if (attempt < 10) {
+        setTimeout(() => tryLogin(attempt + 1), 700);
+        return;
+      }
+
+      alert("A biblioteca Google não carregou. Confirma ligação à internet e tenta novamente.");
       return;
     }
 
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: "openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/spreadsheets",
+      scope:
+        "openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/spreadsheets",
       callback: async tokenResponse => {
         if (tokenResponse.error) {
           alert("Erro no login Google: " + tokenResponse.error);
           return;
         }
+
         try {
-          const profileResponse = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-            headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
-          });
+          const profileResponse = await fetch(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            {
+              headers: {
+                Authorization: `Bearer ${tokenResponse.access_token}`
+              }
+            }
+          );
+
           const profile = await profileResponse.json();
+
           setData(d => ({
             ...d,
             google: {
@@ -279,15 +296,19 @@ function App() {
               accessToken: tokenResponse.access_token
             }
           }));
+
           alert("Login Google efetuado com sucesso.");
         } catch {
           alert("Login Google feito, mas não foi possível ler o perfil.");
         }
       }
     });
+
     tokenClient.requestAccessToken({ prompt: "consent" });
   }
 
+  tryLogin();
+}
   function googleLogout() {
     const token = data.google?.accessToken;
     if (window.google?.accounts?.oauth2 && token) {

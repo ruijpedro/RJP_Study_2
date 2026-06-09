@@ -14,6 +14,7 @@ const initialData = {
   google: {
     clientId: "",
     apiKey: "",
+    scriptUrl: "https://script.google.com/macros/s/AKfycbwVH-6V-ruKKd-K7hoeWQ8MUX7fELqFzI80h224pHE8c4aVbhj7NP21CUcOPz8cd6Rq/exec",
     signedIn: false,
     userEmail: "",
     userName: "",
@@ -86,8 +87,7 @@ function App() {
   });
 
   const [googleForm, setGoogleForm] = useState({
-    clientId: data.google?.clientId || "",
-    apiKey: data.google?.apiKey || ""
+    scriptUrl: data.google?.scriptUrl || "https://script.google.com/macros/s/AKfycbwVH-6V-ruKKd-K7hoeWQ8MUX7fELqFzI80h224pHE8c4aVbhj7NP21CUcOPz8cd6Rq/exec"
   });
 
   useEffect(() => {
@@ -238,124 +238,105 @@ function App() {
 
   function saveGoogleConfig(e) {
     e.preventDefault();
-    setData(d => ({ ...d, google: { ...d.google, clientId: googleForm.clientId.trim(), apiKey: googleForm.apiKey.trim() } }));
-    alert("Configuração Google guardada.");
-  }
-
-  function googleLogin() {
-  const clientId = googleForm.clientId || data.google?.clientId;
-
-  if (!clientId || !clientId.includes(".apps.googleusercontent.com")) {
-    alert("Coloca primeiro o OAuth Client ID correto no campo Google Client ID.");
-    return;
-  }
-
-  function tryLogin(attempt = 1) {
-    if (!window.google?.accounts?.oauth2) {
-      if (attempt < 10) {
-        setTimeout(() => tryLogin(attempt + 1), 700);
-        return;
-      }
-
-      alert("A biblioteca Google não carregou. Confirma ligação à internet e tenta novamente.");
-      return;
-    }
-
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope:
-        "openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/spreadsheets",
-      callback: async tokenResponse => {
-        if (tokenResponse.error) {
-          alert("Erro no login Google: " + tokenResponse.error);
-          return;
-        }
-
-        try {
-          const profileResponse = await fetch(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            {
-              headers: {
-                Authorization: `Bearer ${tokenResponse.access_token}`
-              }
-            }
-          );
-
-          const profile = await profileResponse.json();
-
-          setData(d => ({
-            ...d,
-            google: {
-              ...d.google,
-              clientId,
-              apiKey: googleForm.apiKey || d.google.apiKey,
-              signedIn: true,
-              userEmail: profile.email || "",
-              userName: profile.name || "Utilizador Google",
-              userPhoto: profile.picture || "",
-              accessToken: tokenResponse.access_token
-            }
-          }));
-
-          alert("Login Google efetuado com sucesso.");
-        } catch {
-          alert("Login Google feito, mas não foi possível ler o perfil.");
-        }
-      }
-    });
-
-    tokenClient.requestAccessToken({ prompt: "consent" });
-  }
-
-  tryLogin();
-}
-  function googleLogout() {
-    const token = data.google?.accessToken;
-    if (window.google?.accounts?.oauth2 && token) {
-      window.google.accounts.oauth2.revoke(token, () => {});
-    }
     setData(d => ({
       ...d,
       google: {
         ...d.google,
-        signedIn: false,
-        userEmail: "",
-        userName: "",
-        userPhoto: "",
-        accessToken: "",
-        driveFolderId: "",
-        driveFolderLink: ""
+        scriptUrl: googleForm.scriptUrl.trim()
       }
     }));
+    alert("Ligação Apps Script guardada.");
   }
 
-  async function createDriveFolder() {
-    if (!data.google?.accessToken) {
-      alert("Faz primeiro Entrar com Google.");
+  async function callAppsScript(action, payload = {}) {
+    const scriptUrl = (googleForm.scriptUrl || data.google?.scriptUrl || "").trim();
+
+    if (!scriptUrl || !scriptUrl.includes("script.google.com/macros/s/")) {
+      alert("Coloca primeiro o URL /exec do Apps Script.");
+      return null;
+    }
+
+    try {
+      const response = await fetch(scriptUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action, ...payload })
+      });
+
+      const text = await response.text();
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        return { ok: true, message: text };
+      }
+    } catch (err) {
+      alert("Erro ao comunicar com o Apps Script: " + err.message);
+      return null;
+    }
+  }
+
+  async function testAppsScript() {
+    const scriptUrl = (googleForm.scriptUrl || data.google?.scriptUrl || "").trim();
+
+    if (!scriptUrl) {
+      alert("Coloca primeiro o URL /exec do Apps Script.");
       return;
     }
+
     try {
-      const response = await fetch("https://www.googleapis.com/drive/v3/files", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${data.google.accessToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: "RJP_Study",
-          mimeType: "application/vnd.google-apps.folder"
-        })
-      });
-      const folder = await response.json();
-      if (!folder.id) {
-        alert("Não foi possível criar a pasta no Google Drive.");
-        return;
+      const response = await fetch(scriptUrl);
+      const text = await response.text();
+      alert(text || "Backend Apps Script respondeu.");
+    } catch (err) {
+      alert("Erro ao testar Apps Script: " + err.message);
+    }
+  }
+
+  const examesIPL = [
+    { subjectId: "", title: "Análise de Estruturas", type: "Exame Normal", date: "2026-06-12", topics: "14h30 — AE — Época Normal" },
+    { subjectId: "", title: "Mecânica dos Solos e Fundações II", type: "Exame Normal", date: "2026-06-16", topics: "14h30 — MSF II — Época Normal" },
+    { subjectId: "", title: "Resistência dos Materiais II", type: "Exame Normal", date: "2026-06-25", topics: "14h30 — RM II — Época Normal" },
+    { subjectId: "", title: "Mecânica dos Solos e Fundações II", type: "Recurso", date: "2026-07-06", topics: "14h30 — MSF II — Recurso" },
+    { subjectId: "", title: "Análise de Estruturas", type: "Recurso", date: "2026-07-15", topics: "09h30 — AE — Recurso" },
+    { subjectId: "", title: "Resistência dos Materiais II", type: "Recurso", date: "2026-07-17", topics: "14h30 — RM II — Recurso" },
+    { subjectId: "", title: "Mecânica dos Solos e Fundações II", type: "Especial", date: "2026-07-20", topics: "14h30 — MSF II — Especial" },
+    { subjectId: "", title: "Análise de Estruturas", type: "Especial", date: "2026-07-23", topics: "09h30 — AE — Especial" },
+    { subjectId: "", title: "Resistência dos Materiais II", type: "Especial", date: "2026-07-23", topics: "14h30 — RM II — Especial" }
+  ];
+
+  function importExamesIPLLocal() {
+    setData(d => {
+      const existingKeys = new Set(d.events.map(ev => `${ev.title}|${ev.type}|${ev.date}|${ev.topics}`));
+      const novos = examesIPL
+        .filter(ev => !existingKeys.has(`${ev.title}|${ev.type}|${ev.date}|${ev.topics}`))
+        .map(ev => ({ id: uid(), ...ev }));
+
+      if (novos.length === 0) {
+        alert("Os exames IPL já estavam importados.");
+        return d;
       }
-      const link = `https://drive.google.com/drive/folders/${folder.id}`;
-      setData(d => ({ ...d, google: { ...d.google, driveFolderId: folder.id, driveFolderLink: link } }));
-      alert("Pasta RJP_Study criada no Google Drive.");
-    } catch {
-      alert("Erro ao criar pasta no Google Drive.");
+
+      alert(`${novos.length} exames IPL importados para o calendário interno.`);
+      return { ...d, events: [...d.events, ...novos] };
+    });
+  }
+
+  async function seedExamesIPLBackend() {
+    const result = await callAppsScript("seedExamesIPL");
+    if (result?.ok) {
+      alert(result.message || "Exames IPL enviados para o Google Sheets.");
+    } else if (result) {
+      alert(result.error || "Não foi possível carregar os exames no backend.");
+    }
+  }
+
+  async function exportExamesToGoogleCalendar() {
+    const result = await callAppsScript("exportExamesToCalendar");
+    if (result?.ok) {
+      alert(result.message || "Exames exportados para o Google Calendar.");
+    } else if (result) {
+      alert(result.error || "Não foi possível exportar para o Google Calendar.");
     }
   }
 
@@ -601,35 +582,40 @@ function App() {
 
         {page === "google" && (
           <section>
-            <h2>Google</h2>
+            <h2>Google / Apps Script</h2>
             <form className="form" onSubmit={saveGoogleConfig}>
-              <input placeholder="Google OAuth Client ID" value={googleForm.clientId} onChange={e => setGoogleForm({ ...googleForm, clientId: e.target.value })} />
-              <input placeholder="Google API Key" value={googleForm.apiKey} onChange={e => setGoogleForm({ ...googleForm, apiKey: e.target.value })} />
-              <button>Guardar configuração Google</button>
+              <input
+                placeholder="URL Apps Script terminado em /exec"
+                value={googleForm.scriptUrl}
+                onChange={e => setGoogleForm({ ...googleForm, scriptUrl: e.target.value })}
+              />
+              <button>Guardar ligação</button>
             </form>
+
             <div className="grid">
               <div className="card">
-                <h3>Login Google</h3>
-                {data.google?.signedIn ? (
-                  <>
-                    {data.google.userPhoto && <img src={data.google.userPhoto} alt="Perfil Google" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover" }} />}
-                    <p>{data.google.userName}<br />{data.google.userEmail}</p>
-                    <button onClick={googleLogout}>Terminar sessão</button>
-                  </>
-                ) : (
-                  <><p>Estado: não ligado</p><button onClick={googleLogin}>Entrar com Google</button></>
-                )}
+                <h3>Ligação</h3>
+                <p>Usa Apps Script para ligar a app ao Google Sheets, Drive e Calendar sem OAuth direto na APK.</p>
+                <button onClick={testAppsScript}>Testar ligação</button>
               </div>
+
               <div className="card">
-                <h3>Google Drive</h3>
-                {data.google?.driveFolderId ? (
-                  <><p>Pasta RJP_Study criada.</p><a href={data.google.driveFolderLink} target="_blank" rel="noreferrer">Abrir pasta no Drive</a></>
-                ) : (
-                  <><p>Cria a pasta principal RJP_Study no teu Google Drive.</p><button onClick={createDriveFolder}>Criar pasta RJP_Study</button></>
-                )}
+                <h3>Calendário IPL</h3>
+                <p>Importa AE, MSF II e RM II para o calendário interno da app.</p>
+                <button onClick={importExamesIPLLocal}>Importar exames IPL</button>
               </div>
-              <div className="card"><h3>Google Sheets</h3><p>Preparado para guardar disciplinas, exercícios e notas.</p></div>
-              <div className="card"><h3>Google Calendar</h3><p>Já podes criar eventos através do link Google Calendar.</p></div>
+
+              <div className="card">
+                <h3>Google Sheets</h3>
+                <p>Envia as datas dos exames para a folha RJP_Study_DB.</p>
+                <button onClick={seedExamesIPLBackend}>Enviar exames para Sheets</button>
+              </div>
+
+              <div className="card">
+                <h3>Google Calendar</h3>
+                <p>Cria os exames no Google Calendar através do Apps Script.</p>
+                <button onClick={exportExamesToGoogleCalendar}>Exportar para Google Calendar</button>
+              </div>
             </div>
           </section>
         )}

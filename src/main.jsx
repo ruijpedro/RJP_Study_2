@@ -14,7 +14,6 @@ const initialData = {
   google: {
     clientId: "",
     apiKey: "",
-    scriptUrl: "https://script.google.com/macros/s/AKfycbwVH-6V-ruKKd-K7hoeWQ8MUX7fELqFzI80h224pHE8c4aVbhj7NP21CUcOPz8cd6Rq/exec",
     signedIn: false,
     userEmail: "",
     userName: "",
@@ -72,6 +71,8 @@ function App() {
     subjectId: "", name: "", type: "PDF", link: "", notes: "", fileName: "", fileData: ""
   });
 
+  const [selectedDocFiles, setSelectedDocFiles] = useState([]);
+
   const [exerciseForm, setExerciseForm] = useState({
     subjectId: "", documentId: "", title: "", status: "Por fazer", notes: ""
   });
@@ -87,7 +88,8 @@ function App() {
   });
 
   const [googleForm, setGoogleForm] = useState({
-    scriptUrl: data.google?.scriptUrl || "https://script.google.com/macros/s/AKfycbwVH-6V-ruKKd-K7hoeWQ8MUX7fELqFzI80h224pHE8c4aVbhj7NP21CUcOPz8cd6Rq/exec"
+    clientId: data.google?.clientId || "",
+    apiKey: data.google?.apiKey || ""
   });
 
   useEffect(() => {
@@ -153,17 +155,102 @@ function App() {
     }
   }
 
-  function handleFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setDocForm(f => ({ ...f, name: f.name || file.name, fileName: file.name, fileData: reader.result }));
-    reader.readAsDataURL(file);
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 
-  function addDocument(e) {
+  function handleFile(e) {
+    const files = Array.from(e.target.files || []);
+    setSelectedDocFiles(files);
+
+    if (files.length === 1) {
+      setDocForm(f => ({ ...f, name: f.name || files[0].name, fileName: files[0].name }));
+    }
+
+    if (files.length > 1) {
+      setDocForm(f => ({ ...f, name: `${files.length} documentos selecionados`, fileName: `${files.length} ficheiros` }));
+    }
+  }
+
+  async function sendDocumentsToDrive(subject, docs) {
+    const scriptUrl = getScriptUrl();
+
+    if (!scriptUrl || !scriptUrl.includes("script.google.com/macros/s/") || !scriptUrl.endsWith("/exec")) {
+      return;
+    }
+
+    const payload = {
+      action: "uploadMultipleFiles",
+      data: {
+        perfil: "Rui",
+        disciplinaId: subject?.id || "",
+        disciplinaNome: subject?.name || "Sem Disciplina",
+        categoria: docForm.type === "PDF" ? "PDFs" : docForm.type,
+        notas: docForm.notes || "",
+        files: docs.map(doc => ({
+          fileName: doc.fileName,
+          fileData: doc.fileData,
+          mimeType: doc.mimeType
+        }))
+      }
+    };
+
+    try {
+      await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      // O Apps Script pode executar mesmo quando o browser devolve resposta opaca.
+    }
+  }
+
+  async function addDocument(e) {
     e.preventDefault();
-    if (!docForm.subjectId || !docForm.name.trim()) return;
+
+    if (!docForm.subjectId) {
+      alert("Escolhe primeiro a disciplina.");
+      return;
+    }
+
+    const subject = getSubject(docForm.subjectId);
+
+    if (selectedDocFiles.length > 0) {
+      const docs = await Promise.all(selectedDocFiles.map(async file => ({
+        id: uid(),
+        subjectId: docForm.subjectId,
+        name: file.name,
+        type: docForm.type || "Documento",
+        link: "",
+        notes: docForm.notes || "",
+        fileName: file.name,
+        fileData: await fileToDataUrl(file),
+        mimeType: file.type || "application/octet-stream",
+        size: file.size
+      })));
+
+      setData(d => ({ ...d, documents: [...d.documents, ...docs] }));
+
+      await sendDocumentsToDrive(subject, docs);
+
+      alert(`${docs.length} documento(s) adicionados. O envio para o Google Drive foi iniciado.`);
+      setSelectedDocFiles([]);
+      setDocForm({ subjectId: "", name: "", type: "PDF", link: "", notes: "", fileName: "", fileData: "" });
+      return;
+    }
+
+    if (!docForm.name.trim() && !docForm.link.trim()) {
+      alert("Indica um nome, um link ou seleciona ficheiros.");
+      return;
+    }
+
     setData(d => ({ ...d, documents: [...d.documents, { id: uid(), ...docForm }] }));
     setDocForm({ subjectId: "", name: "", type: "PDF", link: "", notes: "", fileName: "", fileData: "" });
   }
@@ -238,89 +325,125 @@ function App() {
 
   function saveGoogleConfig(e) {
     e.preventDefault();
+    setData(d => ({ ...d, google: { ...d.google, clientId: googleForm.clientId.trim(), apiKey: googleForm.apiKey.trim() } }));
+    alert("Configuração Google guardada.");
+  }
+
+  function googleLogin() {
+  const clientId = googleForm.clientId || data.google?.clientId;
+
+  if (!clientId || !clientId.includes(".apps.googleusercontent.com")) {
+    alert("Coloca primeiro o OAuth Client ID correto no campo Google Client ID.");
+    return;
+  }
+
+  function tryLogin(attempt = 1) {
+    if (!window.google?.accounts?.oauth2) {
+      if (attempt < 10) {
+        setTimeout(() => tryLogin(attempt + 1), 700);
+        return;
+      }
+
+      alert("A biblioteca Google não carregou. Confirma ligação à internet e tenta novamente.");
+      return;
+    }
+
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope:
+        "openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/spreadsheets",
+      callback: async tokenResponse => {
+        if (tokenResponse.error) {
+          alert("Erro no login Google: " + tokenResponse.error);
+          return;
+        }
+
+        try {
+          const profileResponse = await fetch(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            {
+              headers: {
+                Authorization: `Bearer ${tokenResponse.access_token}`
+              }
+            }
+          );
+
+          const profile = await profileResponse.json();
+
+          setData(d => ({
+            ...d,
+            google: {
+              ...d.google,
+              clientId,
+              apiKey: googleForm.apiKey || d.google.apiKey,
+              signedIn: true,
+              userEmail: profile.email || "",
+              userName: profile.name || "Utilizador Google",
+              userPhoto: profile.picture || "",
+              accessToken: tokenResponse.access_token
+            }
+          }));
+
+          alert("Login Google efetuado com sucesso.");
+        } catch {
+          alert("Login Google feito, mas não foi possível ler o perfil.");
+        }
+      }
+    });
+
+    tokenClient.requestAccessToken({ prompt: "consent" });
+  }
+
+  tryLogin();
+}
+  function googleLogout() {
+    const token = data.google?.accessToken;
+    if (window.google?.accounts?.oauth2 && token) {
+      window.google.accounts.oauth2.revoke(token, () => {});
+    }
     setData(d => ({
       ...d,
       google: {
         ...d.google,
-        scriptUrl: googleForm.scriptUrl.trim()
+        signedIn: false,
+        userEmail: "",
+        userName: "",
+        userPhoto: "",
+        accessToken: "",
+        driveFolderId: "",
+        driveFolderLink: ""
       }
     }));
-    alert("Ligação Apps Script guardada.");
   }
 
-  function getScriptUrl() {
-    return (googleForm.scriptUrl || data.google?.scriptUrl || "").trim();
-  }
-
-  function validateScriptUrl() {
-    const scriptUrl = getScriptUrl();
-
-    if (!scriptUrl || !scriptUrl.includes("script.google.com/macros/s/") || !scriptUrl.endsWith("/exec")) {
-      alert("Coloca primeiro o URL /exec correto do Apps Script.");
-      return "";
+  async function createDriveFolder() {
+    if (!data.google?.accessToken) {
+      alert("Faz primeiro Entrar com Google.");
+      return;
     }
-
-    return scriptUrl;
-  }
-
-  function openAppsScript(action = "", params = {}) {
-    const scriptUrl = validateScriptUrl();
-    if (!scriptUrl) return;
-
-    const url = new URL(scriptUrl);
-
-    if (action) {
-      url.searchParams.set("action", action);
+    try {
+      const response = await fetch("https://www.googleapis.com/drive/v3/files", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${data.google.accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: "RJP_Study",
+          mimeType: "application/vnd.google-apps.folder"
+        })
+      });
+      const folder = await response.json();
+      if (!folder.id) {
+        alert("Não foi possível criar a pasta no Google Drive.");
+        return;
+      }
+      const link = `https://drive.google.com/drive/folders/${folder.id}`;
+      setData(d => ({ ...d, google: { ...d.google, driveFolderId: folder.id, driveFolderLink: link } }));
+      alert("Pasta RJP_Study criada no Google Drive.");
+    } catch {
+      alert("Erro ao criar pasta no Google Drive.");
     }
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, String(value));
-      }
-    });
-
-    window.open(url.toString(), "_blank");
-  }
-
-  function testAppsScript() {
-    openAppsScript();
-  }
-
-  const examesIPL = [
-    { subjectId: "", title: "Análise de Estruturas", type: "Exame Normal", date: "2026-06-12", topics: "14h30 — AE — Época Normal" },
-    { subjectId: "", title: "Mecânica dos Solos e Fundações II", type: "Exame Normal", date: "2026-06-16", topics: "14h30 — MSF II — Época Normal" },
-    { subjectId: "", title: "Resistência dos Materiais II", type: "Exame Normal", date: "2026-06-25", topics: "14h30 — RM II — Época Normal" },
-    { subjectId: "", title: "Mecânica dos Solos e Fundações II", type: "Recurso", date: "2026-07-06", topics: "14h30 — MSF II — Recurso" },
-    { subjectId: "", title: "Análise de Estruturas", type: "Recurso", date: "2026-07-15", topics: "09h30 — AE — Recurso" },
-    { subjectId: "", title: "Resistência dos Materiais II", type: "Recurso", date: "2026-07-17", topics: "14h30 — RM II — Recurso" },
-    { subjectId: "", title: "Mecânica dos Solos e Fundações II", type: "Especial", date: "2026-07-20", topics: "14h30 — MSF II — Especial" },
-    { subjectId: "", title: "Análise de Estruturas", type: "Especial", date: "2026-07-23", topics: "09h30 — AE — Especial" },
-    { subjectId: "", title: "Resistência dos Materiais II", type: "Especial", date: "2026-07-23", topics: "14h30 — RM II — Especial" }
-  ];
-
-  function importExamesIPLLocal() {
-    setData(d => {
-      const existingKeys = new Set(d.events.map(ev => `${ev.title}|${ev.type}|${ev.date}|${ev.topics}`));
-      const novos = examesIPL
-        .filter(ev => !existingKeys.has(`${ev.title}|${ev.type}|${ev.date}|${ev.topics}`))
-        .map(ev => ({ id: uid(), ...ev }));
-
-      if (novos.length === 0) {
-        alert("Os exames IPL já estavam importados.");
-        return d;
-      }
-
-      alert(`${novos.length} exames IPL importados para o calendário interno.`);
-      return { ...d, events: [...d.events, ...novos] };
-    });
-  }
-
-  function seedExamesIPLBackend() {
-    openAppsScript("seedExamesIPL");
-  }
-
-  function exportExamesToGoogleCalendar() {
-    openAppsScript("exportExamesToCalendar");
   }
 
   function printWeeklyPlan() { window.print(); }
@@ -498,14 +621,22 @@ function App() {
               <select value={docForm.type} onChange={e => setDocForm({ ...docForm, type: e.target.value })}><option>PDF</option><option>Excel</option><option>Resumo</option><option>Matriz</option><option>Exame</option><option>Ficha</option><option>Apontamentos</option></select>
               <input placeholder="Nome do documento" value={docForm.name} onChange={e => setDocForm({ ...docForm, name: e.target.value })} />
               <input placeholder="Link do documento / Drive" value={docForm.link} onChange={e => setDocForm({ ...docForm, link: e.target.value })} />
-              <input type="file" accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg" onChange={handleFile} />
+              <input type="file" multiple accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg,.webp" onChange={handleFile} />
+              {selectedDocFiles.length > 0 && (
+                <div className="selected-files">
+                  <strong>{selectedDocFiles.length} ficheiro(s) selecionado(s):</strong>
+                  {selectedDocFiles.map(file => (
+                    <span key={`${file.name}-${file.size}`}>{file.name}</span>
+                  ))}
+                </div>
+              )}
               <input placeholder="Notas" value={docForm.notes} onChange={e => setDocForm({ ...docForm, notes: e.target.value })} />
-              <button>Adicionar documento</button>
+              <button>Adicionar documento(s)</button>
             </form>
             {data.documents.length === 0 && <div className="empty">Ainda não existem documentos.</div>}
             {data.documents.map(doc => {
               const subject = getSubject(doc.subjectId);
-              return <div key={doc.id} className="item"><h3>{doc.name}</h3><p>{subject?.name} • {doc.type}</p>{doc.fileName && <p>Ficheiro: {doc.fileName}</p>}<button onClick={() => openDocument(doc)}>Abrir</button><button onClick={() => shareWhatsApp(`RJP_Study\nDocumento: ${doc.name}\nDisciplina: ${subject?.name || ""}\nTipo: ${doc.type}\n${doc.link || ""}`)}>WhatsApp</button><button onClick={() => deleteDocument(doc.id)}>Eliminar</button></div>;
+              return <div key={doc.id} className="item"><h3>{doc.name}</h3><p>{subject?.name} • {doc.type}</p>{doc.fileName && <p>Ficheiro: {doc.fileName}</p>}{doc.size && <p>Tamanho: {Math.round(Number(doc.size) / 1024)} KB</p>}<button onClick={() => openDocument(doc)}>Abrir</button><button onClick={() => shareWhatsApp(`RJP_Study\nDocumento: ${doc.name}\nDisciplina: ${subject?.name || ""}\nTipo: ${doc.type}\n${doc.link || doc.fileUrl || ""}`)}>WhatsApp</button><button onClick={() => deleteDocument(doc.id)}>Eliminar</button></div>;
             })}
           </section>
         )}
@@ -565,40 +696,35 @@ function App() {
 
         {page === "google" && (
           <section>
-            <h2>Google / Apps Script</h2>
+            <h2>Google</h2>
             <form className="form" onSubmit={saveGoogleConfig}>
-              <input
-                placeholder="URL Apps Script terminado em /exec"
-                value={googleForm.scriptUrl}
-                onChange={e => setGoogleForm({ ...googleForm, scriptUrl: e.target.value })}
-              />
-              <button>Guardar ligação</button>
+              <input placeholder="Google OAuth Client ID" value={googleForm.clientId} onChange={e => setGoogleForm({ ...googleForm, clientId: e.target.value })} />
+              <input placeholder="Google API Key" value={googleForm.apiKey} onChange={e => setGoogleForm({ ...googleForm, apiKey: e.target.value })} />
+              <button>Guardar configuração Google</button>
             </form>
-
             <div className="grid">
               <div className="card">
-                <h3>Ligação</h3>
-                <p>Usa Apps Script para ligar a app ao Google Sheets, Drive e Calendar sem OAuth direto na APK.</p>
-                <button onClick={testAppsScript}>Testar ligação</button>
+                <h3>Login Google</h3>
+                {data.google?.signedIn ? (
+                  <>
+                    {data.google.userPhoto && <img src={data.google.userPhoto} alt="Perfil Google" style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover" }} />}
+                    <p>{data.google.userName}<br />{data.google.userEmail}</p>
+                    <button onClick={googleLogout}>Terminar sessão</button>
+                  </>
+                ) : (
+                  <><p>Estado: não ligado</p><button onClick={googleLogin}>Entrar com Google</button></>
+                )}
               </div>
-
               <div className="card">
-                <h3>Calendário IPL</h3>
-                <p>Importa AE, MSF II e RM II para o calendário interno da app.</p>
-                <button onClick={importExamesIPLLocal}>Importar exames IPL</button>
+                <h3>Google Drive</h3>
+                {data.google?.driveFolderId ? (
+                  <><p>Pasta RJP_Study criada.</p><a href={data.google.driveFolderLink} target="_blank" rel="noreferrer">Abrir pasta no Drive</a></>
+                ) : (
+                  <><p>Cria a pasta principal RJP_Study no teu Google Drive.</p><button onClick={createDriveFolder}>Criar pasta RJP_Study</button></>
+                )}
               </div>
-
-              <div className="card">
-                <h3>Google Sheets</h3>
-                <p>Envia as datas dos exames para a folha RJP_Study_DB.</p>
-                <button onClick={seedExamesIPLBackend}>Enviar exames para Sheets</button>
-              </div>
-
-              <div className="card">
-                <h3>Google Calendar</h3>
-                <p>Cria os exames no Google Calendar através do Apps Script.</p>
-                <button onClick={exportExamesToGoogleCalendar}>Exportar para Google Calendar</button>
-              </div>
+              <div className="card"><h3>Google Sheets</h3><p>Preparado para guardar disciplinas, exercícios e notas.</p></div>
+              <div className="card"><h3>Google Calendar</h3><p>Já podes criar eventos através do link Google Calendar.</p></div>
             </div>
           </section>
         )}

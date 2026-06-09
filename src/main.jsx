@@ -447,6 +447,167 @@ function App() {
     openAppsScript();
   }
 
+  function jsonpRequest(action, params = {}) {
+    const scriptUrl = validateScriptUrl();
+
+    if (!scriptUrl) {
+      alert("Coloca primeiro o URL /exec correto do Apps Script.");
+      return Promise.reject(new Error("URL Apps Script inválido"));
+    }
+
+    return new Promise((resolve, reject) => {
+      const callbackName = `rjpCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const url = new URL(scriptUrl);
+
+      url.searchParams.set("action", action);
+      url.searchParams.set("callback", callbackName);
+
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          url.searchParams.set(key, String(value));
+        }
+      });
+
+      const script = document.createElement("script");
+
+      window[callbackName] = result => {
+        delete window[callbackName];
+        script.remove();
+        resolve(result);
+      };
+
+      script.onerror = () => {
+        delete window[callbackName];
+        script.remove();
+        reject(new Error("Erro ao contactar Apps Script"));
+      };
+
+      script.src = url.toString();
+      document.body.appendChild(script);
+    });
+  }
+
+  function normalizeCloudData(cloud) {
+    const disciplinas = cloud?.disciplinas || [];
+    const documentos = cloud?.documentos || [];
+    const exercicios = cloud?.exercicios || [];
+    const eventos = cloud?.eventos || [];
+    const exames = cloud?.exames || [];
+
+    const subjects = disciplinas.map(x => ({
+      id: String(x.id || uid()),
+      name: x.nome || x.name || "",
+      year: x.ano || "",
+      course: x.curso || "",
+      color: x.cor || "#0f2742",
+      difficulty: String(x.dificuldade || "3"),
+      weeklyHours: String(x.horasSemana || x.weeklyHours || "2"),
+      teacher: x.professor || "",
+      notes: x.notas || ""
+    }));
+
+    const documents = documentos.map(x => ({
+      id: String(x.id || uid()),
+      subjectId: String(x.disciplinaId || x.subjectId || ""),
+      name: x.nome || x.name || "",
+      type: x.tipo || x.type || "Documento",
+      link: x.fileUrl || x.link || "",
+      notes: x.notas || "",
+      fileName: x.nome || "",
+      fileData: "",
+      fileUrl: x.fileUrl || x.link || "",
+      mimeType: x.mimeType || "",
+      uploadedToDrive: Boolean(x.fileUrl || x.fileId)
+    }));
+
+    const exercises = exercicios.map(x => ({
+      id: String(x.id || uid()),
+      subjectId: String(x.disciplinaId || x.subjectId || ""),
+      documentId: String(x.documentoId || x.documentId || ""),
+      title: x.titulo || x.title || "",
+      status: x.estado || x.status || "Por fazer",
+      notes: x.notas || ""
+    }));
+
+    const normalEvents = eventos.map(x => ({
+      id: String(x.id || uid()),
+      subjectId: String(x.disciplinaId || x.subjectId || ""),
+      title: x.titulo || x.title || "",
+      type: x.tipo || x.type || "Evento",
+      date: String(x.data || x.date || "").slice(0, 10),
+      topics: x.materia || x.topics || ""
+    }));
+
+    const examEvents = exames.map(x => ({
+      id: String(x.id || uid()),
+      subjectId: "",
+      title: x.disciplina || "Exame",
+      type: x.epoca ? `Exame ${x.epoca}` : "Exame",
+      date: String(x.data || "").slice(0, 10),
+      topics: `${x.hora || ""} — ${x.disciplina || ""} — ${x.epoca || ""}`
+    }));
+
+    return { subjects, documents, exercises, events: [...normalEvents, ...examEvents] };
+  }
+
+  async function loadCloudData() {
+    try {
+      const result = await jsonpRequest("getAll");
+
+      if (!result?.ok) {
+        alert(result?.error || "Não foi possível carregar dados da cloud.");
+        return;
+      }
+
+      const normalized = normalizeCloudData(result.data);
+
+      setData(d => ({
+        ...d,
+        subjects: normalized.subjects,
+        documents: normalized.documents,
+        exercises: normalized.exercises,
+        events: normalized.events
+      }));
+
+      alert("Dados carregados da cloud.");
+    } catch {
+      alert("Erro ao carregar dados da cloud. Confirma o URL Apps Script.");
+    }
+  }
+
+  async function saveCloudData() {
+    const scriptUrl = validateScriptUrl();
+
+    if (!scriptUrl) {
+      alert("Coloca primeiro o URL /exec correto do Apps Script.");
+      return;
+    }
+
+    const payload = {
+      action: "syncAll",
+      data: {
+        perfil: "Rui",
+        subjects: data.subjects,
+        documents: data.documents,
+        exercises: data.exercises,
+        events: data.events
+      }
+    };
+
+    try {
+      await fetch(scriptUrl, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+
+      alert("Sincronização enviada para a cloud. Aguarda alguns segundos e usa Carregar da Cloud para confirmar.");
+    } catch {
+      alert("Não foi possível enviar dados para a cloud.");
+    }
+  }
+
   const examesIPL = [
     { subjectId: "", title: "Análise de Estruturas", type: "Exame Normal", date: "2026-06-12", topics: "14h30 — AE — Época Normal" },
     { subjectId: "", title: "Mecânica dos Solos e Fundações II", type: "Exame Normal", date: "2026-06-16", topics: "14h30 — MSF II — Época Normal" },
@@ -751,6 +912,13 @@ function App() {
                 <h3>Google Drive</h3>
                 <p>Ao adicionar vários documentos, a app envia-os para a pasta da disciplina no Drive.</p>
                 <button onClick={() => openAppsScript("setup")}>Preparar Drive/Sheets</button>
+              </div>
+
+              <div className="card">
+                <h3>Sincronização Cloud</h3>
+                <p>Usa a mesma base Google Sheets/Drive na APK e na WebApp.</p>
+                <button onClick={saveCloudData}>Guardar tudo na Cloud</button>
+                <button onClick={loadCloudData}>Carregar da Cloud</button>
               </div>
 
               <div className="card">

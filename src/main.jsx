@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./styles.css";
+import RJPChatGPTFloating from "./components/RJPChatGPTFloating";
 
 const APP_NAME = "RJP Study";
 const OWNER_NAME = "Rui Pedro";
@@ -407,7 +408,10 @@ function App() {
       {page === "exam" && <section><h2>Modo Exame</h2><form className="form" onSubmit={saveExamMode}><input placeholder="Disciplina" value={examForm.subjectName} onChange={e => setExamForm({ ...examForm, subjectName: e.target.value })} /><input type="date" value={examForm.examDate} onChange={e => setExamForm({ ...examForm, examDate: e.target.value })} /><input type="number" placeholder="Horas alvo" value={examForm.targetHours} onChange={e => setExamForm({ ...examForm, targetHours: e.target.value })} /><button>Ativar modo exame</button></form>{data.examMode?.enabled && <div className="exam-banner"><h3>{data.examMode.subjectName}</h3><strong>{examDays !== null ? `${examDays} dias até ao exame` : "Data não definida"}</strong><p>Horas alvo: {data.examMode.targetHours}h</p><button onClick={disableExamMode}>Desativar modo exame</button></div>}</section>}
 
       {page === "google" && <section><h2>Google Drive / Apps Script</h2><form className="form" onSubmit={saveGoogleConfig}><input placeholder="URL Apps Script terminado em /exec" value={googleForm.scriptUrl} onChange={e => setGoogleForm({ ...googleForm, scriptUrl: e.target.value })} /><button>Guardar ligação</button></form><div className="grid"><div className="card"><h3>Ligação</h3><p>Backend: Sheets, Drive e Calendar sem OAuth direto na APK.</p><button onClick={testAppsScript}>Testar ligação</button></div><div className="card"><h3>Pastas padrão</h3><p>Cria {DRIVE_ROOT} com Exames, Apontamentos, Aulas, Fichas, Resumos e Outras categorias.</p><button onClick={() => openAppsScript("setup")}>Preparar Drive/Sheets</button></div><div className="card"><h3>Sincronizar Drive</h3><p>Lê as pastas do Drive e atualiza disciplinas/documentos na APK e WebApp.</p><button onClick={syncDriveStructure}>📁 Sincronizar Drive</button></div><div className="card"><h3>Cloud</h3><p>Usa a mesma base Google Sheets/Drive na APK e na WebApp.</p><button onClick={saveCloudData}>Guardar tudo na Cloud</button><button onClick={loadCloudData}>Carregar da Cloud</button><button onClick={syncAll}>🔄 Sincronizar tudo</button></div><div className="card"><h3>Calendário</h3><p>Importar exames locais e exportar para Calendar pelo Apps Script.</p><button onClick={importExamesIPLLocal}>Importar exames</button><button onClick={exportExamesToGoogleCalendar}>Exportar Calendar</button></div></div></section>}
-    </main>
+        </main>
+
+    <RJPChatGPTFloating />
+
   </div>;
 }
 

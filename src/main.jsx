@@ -8,7 +8,7 @@ const OWNER_NAME = "Rui Pedro";
 const DRIVE_ROOT = "RJP_Study";
 const STORAGE_KEY = "RJP_STUDY_DRIVE_SYNC_V1";
 const DISCLAIMER_KEY = `${STORAGE_KEY}_DISCLAIMER_ACCEPTED`;
-const DEFAULT_SCRIPT_URL = "";
+const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxRYMRdF4SfAZ-aBEiA3fQaI8I2V0Z3f8IN9tZ6iwI1igze9tg-0xc2FoJmGlMlF0csXQ/exec";
 
 const CATEGORIES = ["Exames", "Apontamentos", "Aulas", "Fichas", "Resumos", "Trabalhos", "Testes", "Imagens", "Vídeos", "Outros"];
 

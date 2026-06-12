@@ -4,7 +4,7 @@
 
 export const OPENAI_CONFIG = {
   // Opção A - simples: cola aqui a tua API Key entre aspas.
-  apiKey: "COLOCA_AQUI_A_TUA_OPENAI_API_KEY",
+  apiKey: "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",
 
   // Opção B - recomendada para GitHub/Vite: VITE_OPENAI_API_KEY=sk-...
   envApiKey: import.meta.env?.VITE_OPENAI_API_KEY || "",

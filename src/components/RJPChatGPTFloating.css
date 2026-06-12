@@ -1,0 +1,1 @@
+.rjp-chatgpt-floating{position:fixed;right:18px;bottom:18px;z-index:9999;width:58px;height:58px;border:0;border-radius:50%;background:#1f5eff;color:#fff;font-size:26px;box-shadow:0 10px 30px rgba(0,0,0,.25)}.rjp-chatgpt-floating-panel{position:fixed;right:16px;bottom:86px;z-index:9998;width:min(460px,calc(100vw - 32px));max-height:80vh;overflow:auto}

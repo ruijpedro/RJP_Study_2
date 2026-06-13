@@ -161,7 +161,7 @@ ${question || "Analisa o anexo e explica o conteúdo de forma útil para estudo.
         userContent.push({
           type: "input_file",
           filename: docFile.name,
-          file_data: dataUrlToBase64(docDataUrl),
+         file_data: docDataUrl,
         });
       }
 

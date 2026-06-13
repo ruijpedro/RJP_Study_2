@@ -15,35 +15,18 @@ Quando resolveres exercícios:
 6. Quando existirem Eurocódigos, indica a lógica de verificação, sem substituir validação profissional.`;
 
 const QUICK_PROMPTS = [
-  {
-    label: "Resolver exercício",
-    text: "Resolve este exercício passo a passo, como aluno de Engenharia Civil em Portugal. Explica os dados, fórmulas, unidades e resultado final.",
-  },
-  {
-    label: "Explicar matéria",
-    text: "Explica esta matéria de forma simples, com exemplos práticos e ligação à Engenharia Civil.",
-  },
-  {
-    label: "Preparar exame",
-    text: "Cria um plano de estudo para esta matéria, com tópicos prioritários, exercícios tipo e erros comuns em exame.",
-  },
-  {
-    label: "Corrigir resposta",
-    text: "Corrige a minha resposta, identifica erros, melhora a estrutura e diz que cotação provável teria num exame.",
-  },
-  {
-    label: "Gerar perguntas",
-    text: "Gera perguntas de treino e pequenas questões de exame sobre esta matéria, com soluções resumidas.",
-  },
-  {
-    label: "Resumir apontamentos",
-    text: "Resume estes apontamentos para estudo rápido, com fórmulas principais, conceitos-chave e alertas de exame.",
-  },
+  { label: "Resolver exercício", text: "Resolve este exercício passo a passo, como aluno de Engenharia Civil em Portugal. Explica os dados, fórmulas, unidades e resultado final." },
+  { label: "Explicar matéria", text: "Explica esta matéria de forma simples, com exemplos práticos e ligação à Engenharia Civil." },
+  { label: "Preparar exame", text: "Cria um plano de estudo para esta matéria, com tópicos prioritários, exercícios tipo e erros comuns em exame." },
+  { label: "Corrigir resposta", text: "Corrige a minha resposta, identifica erros, melhora a estrutura e diz que cotação provável teria num exame." },
+  { label: "Gerar perguntas", text: "Gera perguntas de treino e pequenas questões de exame sobre esta matéria, com soluções resumidas." },
+  { label: "Resumir documento", text: "Resume o documento anexado para estudo rápido, com fórmulas principais, conceitos-chave e alertas de exame." },
 ];
+
+const ALLOWED_DOC_EXTENSIONS = [".pdf", ".docx", ".xlsx", ".pptx", ".txt"];
 
 function extractOutputText(data) {
   if (typeof data?.output_text === "string") return data.output_text;
-
   const chunks = [];
   for (const item of data?.output || []) {
     for (const content of item?.content || []) {
@@ -63,6 +46,19 @@ function fileToDataUrl(file) {
   });
 }
 
+function getFileExtension(fileName = "") {
+  const dot = fileName.lastIndexOf(".");
+  return dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
+}
+
+function isAllowedDocument(file) {
+  return ALLOWED_DOC_EXTENSIONS.includes(getFileExtension(file.name));
+}
+
+function dataUrlToBase64(dataUrl) {
+  return String(dataUrl || "").split(",")[1] || "";
+}
+
 export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) {
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
@@ -73,11 +69,13 @@ export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) 
   const [imageFile, setImageFile] = useState(null);
   const [imageDataUrl, setImageDataUrl] = useState("");
 
+  const [docFile, setDocFile] = useState(null);
+  const [docDataUrl, setDocDataUrl] = useState("");
+
   const apiKey = useMemo(() => getOpenAIKey(), []);
 
   const handleImage = async (e) => {
     setError("");
-
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -88,16 +86,38 @@ export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) 
 
     try {
       setImageFile(file);
-      const dataUrl = await fileToDataUrl(file);
-      setImageDataUrl(dataUrl);
+      setImageDataUrl(await fileToDataUrl(file));
     } catch {
       setError("Não foi possível ler a imagem.");
+    }
+  };
+
+  const handleDocument = async (e) => {
+    setError("");
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!isAllowedDocument(file)) {
+      setError("Formato não permitido. Usa apenas PDF, DOCX, XLSX, PPTX ou TXT.");
+      return;
+    }
+
+    try {
+      setDocFile(file);
+      setDocDataUrl(await fileToDataUrl(file));
+    } catch {
+      setError("Não foi possível ler o documento.");
     }
   };
 
   const removeImage = () => {
     setImageFile(null);
     setImageDataUrl("");
+  };
+
+  const removeDocument = () => {
+    setDocFile(null);
+    setDocDataUrl("");
   };
 
   const askChatGPT = async () => {
@@ -109,8 +129,8 @@ export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) 
       return;
     }
 
-    if (!question.trim() && !imageDataUrl) {
-      setError("Escreve a pergunta ou escolhe uma foto/imagem antes de enviar.");
+    if (!question.trim() && !imageDataUrl && !docDataUrl) {
+      setError("Escreve a pergunta, escolhe uma imagem ou anexa um documento antes de enviar.");
       return;
     }
 
@@ -126,7 +146,7 @@ Contexto da app/documentos:
 ${contexto || "Sem contexto adicional."}
 
 Pedido do Rui:
-${question || "Analisa a imagem anexada e explica o que vês de forma útil para estudo."}`,
+${question || "Analisa o anexo e explica o conteúdo de forma útil para estudo."}`,
         },
       ];
 
@@ -137,19 +157,21 @@ ${question || "Analisa a imagem anexada e explica o que vês de forma útil para
         });
       }
 
+      if (docDataUrl && docFile) {
+        userContent.push({
+          type: "input_file",
+          filename: docFile.name,
+          file_data: dataUrlToBase64(docDataUrl),
+        });
+      }
+
       const payload = {
         model: OPENAI_CONFIG.model,
         temperature: OPENAI_CONFIG.temperature,
         max_output_tokens: OPENAI_CONFIG.maxOutputTokens,
         input: [
-          {
-            role: "system",
-            content: SYSTEM_PROMPT,
-          },
-          {
-            role: "user",
-            content: userContent,
-          },
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userContent },
         ],
       };
 
@@ -192,7 +214,7 @@ ${question || "Analisa a imagem anexada e explica o que vês de forma útil para
         <div className="rjp-chatgpt-panel">
           <div className="rjp-chatgpt-header">
             <strong>Assistente RJP_Study</strong>
-            <span>Exames · Exercícios · Fotos · Explicações</span>
+            <span>Exames · Exercícios · Fotos · Documentos</span>
           </div>
 
           <div className="rjp-chatgpt-prompts">
@@ -215,6 +237,16 @@ ${question || "Analisa a imagem anexada e explica o que vês de forma útil para
               />
             </label>
 
+            <label className="rjp-chatgpt-upload-btn">
+              📎 Anexar documento
+              <input
+                type="file"
+                accept=".pdf,.docx,.xlsx,.pptx,.txt"
+                onChange={handleDocument}
+                style={{ display: "none" }}
+              />
+            </label>
+
             {imageFile && (
               <div className="rjp-chatgpt-file">
                 <span>Imagem: {imageFile.name}</span>
@@ -224,12 +256,17 @@ ${question || "Analisa a imagem anexada e explica o que vês de forma útil para
               </div>
             )}
 
+            {docFile && (
+              <div className="rjp-chatgpt-file">
+                <span>Documento: {docFile.name}</span>
+                <button type="button" onClick={removeDocument} disabled={loading}>
+                  Remover
+                </button>
+              </div>
+            )}
+
             {imageDataUrl && (
-              <img
-                src={imageDataUrl}
-                alt="Imagem escolhida"
-                className="rjp-chatgpt-preview"
-              />
+              <img src={imageDataUrl} alt="Imagem escolhida" className="rjp-chatgpt-preview" />
             )}
           </div>
 

@@ -157,17 +157,6 @@ ${question || "Analisa o anexo e explica o conteúdo de forma útil para estudo.
          file_data: docDataUrl,
         });
       }
-
-      const payload = {
-        model: OPENAI_CONFIG.model,
-        temperature: OPENAI_CONFIG.temperature,
-        max_output_tokens: OPENAI_CONFIG.maxOutputTokens,
-        input: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userContent },
-        ],
-      };
-
     const payload = {
   action: "chatgpt",
   data: {

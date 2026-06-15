@@ -72,8 +72,6 @@ export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) 
   const [docFile, setDocFile] = useState(null);
   const [docDataUrl, setDocDataUrl] = useState("");
 
-  const apiKey = useMemo(() => getOpenAIKey(), []);
-
   const handleImage = async (e) => {
     setError("");
     const file = e.target.files?.[0];
@@ -124,11 +122,6 @@ export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) 
     setError("");
     setAnswer("");
 
-    if (!apiKey) {
-      setError("Falta configurar a API Key em src/config/openaiConfig.js ou em VITE_OPENAI_API_KEY.");
-      return;
-    }
-
     if (!question.trim() && !imageDataUrl && !docDataUrl) {
       setError("Escreve a pergunta, escolhe uma imagem ou anexa um documento antes de enviar.");
       return;
@@ -175,23 +168,38 @@ ${question || "Analisa o anexo e explica o conteúdo de forma útil para estudo.
         ],
       };
 
-      const res = await fetch(OPENAI_CONFIG.endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(payload),
-      });
+    const payload = {
+  action: "chatgpt",
+  data: {
+    question,
+    imageDataUrl,
+    docDataUrl,
+    docName: docFile?.name || "",
+    model: OPENAI_CONFIG.model,
+  },
+};
 
-      const data = await res.json();
+const appsScriptUrl = "https://script.google.com/macros/s/AKfycbw-LJFgqmh0zFrgC6ySIe8qDgRf6pnMbcmqFmFlwWhvP-UnbZSbME5Q5dxv8Vd7aHUqVQ/exec";
+
+const res = await fetch(appsScriptUrl, {
+  method: "POST",
+  headers: {
+    "Content-Type": "text/plain;charset=utf-8",
+  },
+  body: JSON.stringify(payload),
+});
+
+const data = await res.json();
 
       if (!res.ok) {
         throw new Error(data?.error?.message || `Erro HTTP ${res.status}`);
       }
 
-      const text = extractOutputText(data);
-      setAnswer(text || "A resposta veio vazia. Confirma o modelo/API Key.");
+ if (!data.ok) {
+  throw new Error(data.error || "Erro no Apps Script.");
+}
+
+setAnswer(data.answer || "A resposta veio vazia.");
     } catch (err) {
       setError(err.message || "Erro ao ligar ao ChatGPT.");
     } finally {

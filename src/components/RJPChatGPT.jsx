@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { OPENAI_CONFIG, getOpenAIKey } from "../config/openaiConfig";
+import React, { useState } from "react";
+import { OPENAI_CONFIG } from "../config/openaiConfig";
 import "./RJPChatGPT.css";
 
 const SYSTEM_PROMPT = `És o assistente técnico e académico da RJP_Study.
@@ -25,18 +25,6 @@ const QUICK_PROMPTS = [
 
 const ALLOWED_DOC_EXTENSIONS = [".pdf", ".docx", ".xlsx", ".pptx", ".txt"];
 
-function extractOutputText(data) {
-  if (typeof data?.output_text === "string") return data.output_text;
-  const chunks = [];
-  for (const item of data?.output || []) {
-    for (const content of item?.content || []) {
-      if (content?.type === "output_text" && content?.text) chunks.push(content.text);
-      if (content?.type === "text" && content?.text) chunks.push(content.text);
-    }
-  }
-  return chunks.join("\n").trim();
-}
-
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -53,10 +41,6 @@ function getFileExtension(fileName = "") {
 
 function isAllowedDocument(file) {
   return ALLOWED_DOC_EXTENSIONS.includes(getFileExtension(file.name));
-}
-
-function dataUrlToBase64(dataUrl) {
-  return String(dataUrl || "").split(",")[1] || "";
 }
 
 export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) {
@@ -130,73 +114,43 @@ export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) 
     setLoading(true);
 
     try {
-      const userContent = [
-        {
-          type: "input_text",
-          text: `Disciplina/área: ${disciplina}
-
-Contexto da app/documentos:
-${contexto || "Sem contexto adicional."}
-
-Pedido do Rui:
-${question || "Analisa o anexo e explica o conteúdo de forma útil para estudo."}`,
+      const payload = {
+        action: "chatgpt",
+        data: {
+          systemPrompt: SYSTEM_PROMPT,
+          disciplina,
+          contexto,
+          question: question || "Analisa o anexo e explica o conteúdo de forma útil para estudo.",
+          imageDataUrl,
+          docDataUrl,
+          docName: docFile?.name || "",
+          model: OPENAI_CONFIG.model,
         },
-      ];
+      };
 
-      if (imageDataUrl) {
-        userContent.push({
-          type: "input_image",
-          image_url: imageDataUrl,
-        });
-      }
+      const appsScriptUrl =
+        "https://script.google.com/macros/s/AKfycbw-LJFgqmh0zFrgC6ySIe8qDgRf6pnMbcmqFmFlwWhvP-UnbZSbME5Q5dxv8Vd7aHUqVQ/exec";
 
-      if (docDataUrl && docFile) {
-        userContent.push({
-          type: "input_file",
-          filename: docFile.name,
-         file_data: docDataUrl,
-        });
-      }
-    const payload = {
-  action: "chatgpt",
-  data: {
-    question,
-    imageDataUrl,
-    docDataUrl,
-    docName: docFile?.name || "",
-    model: OPENAI_CONFIG.model,
-  },
-};
+      const res = await fetch(appsScriptUrl, {
+        method: "POST",
+        mode: "cors",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify(payload),
+      });
 
-const appsScriptUrl = "https://script.google.com/macros/s/AKfycbw-LJFgqmh0zFrgC6ySIe8qDgRf6pnMbcmqFmFlwWhvP-UnbZSbME5Q5dxv8Vd7aHUqVQ/exec";
-
-const res = await fetch(appsScriptUrl, {
-  method: "POST",
-  mode: "cors",
-  headers: {
-    "Content-Type": "text/plain;charset=utf-8",
-  },
-  body: JSON.stringify(payload),
-});
-
-  method: "POST",
-  headers: {
-    "Content-Type": "text/plain;charset=utf-8",
-  },
-  body: JSON.stringify(payload),
-});
-
-const data = await res.json();
+      const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data?.error?.message || `Erro HTTP ${res.status}`);
+        throw new Error(data?.error || `Erro HTTP ${res.status}`);
       }
 
- if (!data.ok) {
-  throw new Error(data.error || "Erro no Apps Script.");
-}
+      if (!data.ok) {
+        throw new Error(data.error || "Erro no Apps Script.");
+      }
 
-setAnswer(data.answer || "A resposta veio vazia.");
+      setAnswer(data.answer || "A resposta veio vazia.");
     } catch (err) {
       setError(err.message || "Erro ao ligar ao ChatGPT.");
     } finally {
@@ -271,7 +225,11 @@ setAnswer(data.answer || "A resposta veio vazia.");
             )}
 
             {imageDataUrl && (
-              <img src={imageDataUrl} alt="Imagem escolhida" className="rjp-chatgpt-preview" />
+              <img
+                src={imageDataUrl}
+                alt="Imagem escolhida"
+                className="rjp-chatgpt-preview"
+              />
             )}
           </div>
 

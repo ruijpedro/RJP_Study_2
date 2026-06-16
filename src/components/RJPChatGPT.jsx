@@ -138,7 +138,6 @@ export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) 
   },
   body: JSON.stringify(payload),
 });
-      });
 
       const data = await res.json();
 

@@ -172,6 +172,14 @@ const appsScriptUrl = "https://script.google.com/macros/s/AKfycbw-LJFgqmh0zFrgC6
 
 const res = await fetch(appsScriptUrl, {
   method: "POST",
+  mode: "cors",
+  headers: {
+    "Content-Type": "text/plain;charset=utf-8",
+  },
+  body: JSON.stringify(payload),
+});
+
+  method: "POST",
   headers: {
     "Content-Type": "text/plain;charset=utf-8",
   },

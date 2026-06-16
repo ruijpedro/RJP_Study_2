@@ -131,14 +131,24 @@ export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) 
       const appsScriptUrl =
         "https://script.google.com/macros/s/AKfycbw-LJFgqmh0zFrgC6ySIe8qDgRf6pnMbcmqFmFlwWhvP-UnbZSbME5Q5dxv8Vd7aHUqVQ/exec";
 
-    const res = await fetch(appsScriptUrl, {
+const res = await fetch(appsScriptUrl, {
   method: "POST",
+  mode: "no-cors",
   headers: {
     "Content-Type": "text/plain;charset=utf-8",
   },
   body: JSON.stringify(payload),
 });
+let data;
 
+try {
+  data = await res.json();
+} catch {
+  data = {
+    ok: false,
+    error: "Resposta inválida do servidor"
+  };
+}
       const data = await res.json();
 
       if (!res.ok) {

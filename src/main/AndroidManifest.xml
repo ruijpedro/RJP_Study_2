@@ -1,1 +1,104 @@
+name: Build RJP Study Android
 
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build web
+        run: npm run build
+
+      - name: Add Android platform
+        run: |
+          rm -rf android
+          npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Force Android Manifest permissions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          txt = p.read_text(encoding="utf-8")
+
+          if 'android.permission.INTERNET' not in txt:
+              txt = txt.replace(
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\\n\\n    <uses-permission android:name="android.permission.INTERNET" />'
+              )
+
+          if 'android.permission.ACCESS_NETWORK_STATE' not in txt:
+              txt = txt.replace(
+                  '<uses-permission android:name="android.permission.INTERNET" />',
+                  '<uses-permission android:name="android.permission.INTERNET" />\\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />'
+              )
+
+          p.write_text(txt, encoding="utf-8")
+          print(txt)
+          PY
+
+      - name: Force RJP Study Android icon
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+          mkdir -p android/app/src/main/res/mipmap-mdpi
+          mkdir -p android/app/src/main/res/mipmap-hdpi
+          mkdir -p android/app/src/main/res/mipmap-xhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+
+          convert public/icon-512.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          convert public/icon-512.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert public/icon-512.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert public/icon-512.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          convert public/icon-512.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+
+          cp android/app/src/main/res/mipmap-mdpi/ic_launcher.png android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
+          cp android/app/src/main/res/mipmap-hdpi/ic_launcher.png android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
+          cp android/app/src/main/res/mipmap-xhdpi/ic_launcher.png android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
+          cp android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
+          cp android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+
+          rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RJP_Study_Debug_APK
+          path: android/app/build/outputs/apk/debug/*.apk

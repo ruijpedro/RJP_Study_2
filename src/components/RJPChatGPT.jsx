@@ -139,16 +139,7 @@ const res = await fetch(appsScriptUrl, {
   },
   body: JSON.stringify(payload),
 });
-let data;
 
-try {
-  data = await res.json();
-} catch {
-  data = {
-    ok: false,
-    error: "Resposta inválida do servidor"
-  };
-}
       const data = await res.json();
 
       if (!res.ok) {

@@ -131,14 +131,13 @@ export default function RJPChatGPT({ contexto = "", disciplina = "RJP_Study" }) 
       const appsScriptUrl =
         "https://script.google.com/macros/s/AKfycbw-LJFgqmh0zFrgC6ySIe8qDgRf6pnMbcmqFmFlwWhvP-UnbZSbME5Q5dxv8Vd7aHUqVQ/exec";
 
-const res = await fetch(appsScriptUrl, {
-  method: "POST",
-  mode: "no-cors",
-  headers: {
-    "Content-Type": "text/plain;charset=utf-8",
-  },
-  body: JSON.stringify(payload),
-});
+      const res = await fetch(appsScriptUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify(payload),
+      });
 
       const data = await res.json();
 
